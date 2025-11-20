@@ -61,6 +61,31 @@ class Database:
             conn.commit()
             return cur.rowcount
 
+    # --- НОВИЙ МЕТОД ---
+    def execute_file(self, filepath: str):
+        """Виконує SQL-скрипт із вказаного файлу."""
+        if not os.path.exists(filepath):
+            print(f"❌ Файл не знайдено: {filepath}")
+            return
+
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                sql_script = f.read()
+        except Exception as e:
+             print(f"❌ Помилка читання файлу '{filepath}': {e}")
+             return
+
+        conn = self.connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql_script)
+                conn.commit()
+                print(f"✅ Скрипт '{filepath}' успішно виконано!")
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ Помилка при виконанні SQL з '{filepath}':\n{e}")
+    # -------------------
+
     def close(self):
         """Закрити підключення"""
         if self._conn is not None and not self._conn.closed:

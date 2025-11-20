@@ -261,8 +261,8 @@ class QueriesFrame(tk.Frame):
         sb_y.grid(row=2, column=0, sticky="nse", padx=(0,8), pady=8)
 
         # Run button
-        btn_run = ttk.Button(self, text="Виконати", command=self._run)
-        btn_run.grid(row=3, column=0, sticky="e", padx=8, pady=(0,8))
+        btn_export = ttk.Button(self, text="💾 Експорт", command=self._export)
+        btn_export.grid(row=3, column=0, sticky="e", padx=8, pady=(0, 8))
 
         self._param_widgets = []
 
@@ -299,6 +299,27 @@ class QueriesFrame(tk.Frame):
 
             self._param_widgets.append(lbl)
             self._param_widgets.append(ent)
+
+    def _export(self):
+        items = self.tree.get_children()
+        if not items:
+            messagebox.showwarning("Увага", "Немає даних для експорту")
+            return
+
+        filename = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files", "*.csv")])
+        if not filename:
+            return
+
+        try:
+            cols = self.tree["columns"]
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(cols)  # Заголовки
+                for item in items:
+                    writer.writerow(self.tree.item(item)['values'])
+            messagebox.showinfo("Успіх", "Звіт збережено!")
+        except Exception as e:
+            messagebox.showerror("Помилка", str(e))
 
     # Collect param values
     def _collect_params(self, idx):

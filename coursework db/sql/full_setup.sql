@@ -45,7 +45,7 @@ INSERT INTO roles (name) VALUES
     ('Authorized');
 
 -- Users
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     login VARCHAR(100) NOT NULL UNIQUE,
     password TEXT NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE users (
 );
 
 -- Access requests
-CREATE TABLE access_requests (
+CREATE TABLE IF NOT EXISTS access_requests (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id) ON DELETE CASCADE,
     comment TEXT,
@@ -69,14 +69,25 @@ CREATE TABLE access_requests (
 -- =====================================================
 
 -- Military districts
-CREATE TABLE military_districts (
+CREATE TABLE IF NOT EXISTS military_districts (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     code VARCHAR(50) UNIQUE
 );
 
+-- Таблиця запитів на відновлення пароля
+CREATE TABLE IF NOT EXISTS password_resets (
+    id SERIAL PRIMARY KEY,
+    login VARCHAR(100) NOT NULL,
+    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP
+);
+
+COMMENT ON TABLE password_resets IS 'Історія запитів на відновлення пароля';
+
 -- Armies
-CREATE TABLE armies (
+CREATE TABLE IF NOT EXISTS armies (
     id SERIAL PRIMARY KEY,
     number VARCHAR(50) NOT NULL,
     name VARCHAR(255),
@@ -84,7 +95,7 @@ CREATE TABLE armies (
 );
 
 -- Corps
-CREATE TABLE corps (
+CREATE TABLE IF NOT EXISTS corps (
     id SERIAL PRIMARY KEY,
     number VARCHAR(50) NOT NULL,
     name VARCHAR(255),
@@ -92,7 +103,7 @@ CREATE TABLE corps (
 );
 
 -- Divisions
-CREATE TABLE divisions (
+CREATE TABLE IF NOT EXISTS divisions (
     id SERIAL PRIMARY KEY,
     number VARCHAR(50) NOT NULL,
     name VARCHAR(255),
@@ -100,7 +111,7 @@ CREATE TABLE divisions (
 );
 
 -- Deployment locations
-CREATE TABLE locations (
+CREATE TABLE IF NOT EXISTS locations (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     address TEXT,
@@ -109,7 +120,7 @@ CREATE TABLE locations (
 );
 
 -- Military units
-CREATE TABLE military_units (
+CREATE TABLE IF NOT EXISTS military_units (
     id SERIAL PRIMARY KEY,
     number VARCHAR(50) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
@@ -123,7 +134,7 @@ CREATE TABLE military_units (
 -- =====================================================
 
 -- Companies
-CREATE TABLE companies (
+CREATE TABLE IF NOT EXISTS companies (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     military_unit_id INT NOT NULL REFERENCES military_units(id) ON DELETE CASCADE,
@@ -131,7 +142,7 @@ CREATE TABLE companies (
 );
 
 -- Platoons
-CREATE TABLE platoons (
+CREATE TABLE IF NOT EXISTS platoons (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
@@ -139,7 +150,7 @@ CREATE TABLE platoons (
 );
 
 -- Squads
-CREATE TABLE squads (
+CREATE TABLE IF NOT EXISTS squads (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     platoon_id INT NOT NULL REFERENCES platoons(id) ON DELETE CASCADE,
@@ -151,7 +162,7 @@ CREATE TABLE squads (
 -- =====================================================
 
 -- Personnel categories
-CREATE TABLE personnel_categories (
+CREATE TABLE IF NOT EXISTS personnel_categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE
 );
@@ -162,7 +173,7 @@ INSERT INTO personnel_categories (name) VALUES
     ('Private Staff');
 
 -- Ranks
-CREATE TABLE ranks (
+CREATE TABLE IF NOT EXISTS ranks (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
     category_id INT NOT NULL REFERENCES personnel_categories(id)
@@ -185,14 +196,14 @@ INSERT INTO ranks (name, category_id) VALUES
     ('Private', 3);
 
 -- Military specialties
-CREATE TABLE specialties (
+CREATE TABLE IF NOT EXISTS specialties (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     code VARCHAR(50) UNIQUE
 );
 
 -- Military personnel
-CREATE TABLE military_personnel (
+CREATE TABLE IF NOT EXISTS military_personnel (
     id SERIAL PRIMARY KEY,
     last_name VARCHAR(100) NOT NULL,
     first_name VARCHAR(100) NOT NULL,
@@ -207,7 +218,7 @@ CREATE TABLE military_personnel (
 );
 
 -- Additional data for generals
-CREATE TABLE generals_info (
+CREATE TABLE IF NOT EXISTS generals_info (
     personnel_id INT PRIMARY KEY REFERENCES military_personnel(id) ON DELETE CASCADE,
     academy_graduation_date DATE,
     general_rank_date DATE,
@@ -215,7 +226,7 @@ CREATE TABLE generals_info (
 );
 
 -- Personnel to specialties relationship (many-to-many)
-CREATE TABLE personnel_specialties (
+CREATE TABLE IF NOT EXISTS personnel_specialties (
     personnel_id INT REFERENCES military_personnel(id) ON DELETE CASCADE,
     specialty_id INT REFERENCES specialties(id) ON DELETE CASCADE,
     PRIMARY KEY (personnel_id, specialty_id)
@@ -226,14 +237,14 @@ CREATE TABLE personnel_specialties (
 -- =====================================================
 
 -- Equipment types
-CREATE TABLE equipment_types (
+CREATE TABLE IF NOT EXISTS equipment_types (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     category VARCHAR(100) -- "Combat Vehicle", "Transport Vehicle"
 );
 
 -- Equipment
-CREATE TABLE equipment (
+CREATE TABLE IF NOT EXISTS equipment (
     id SERIAL PRIMARY KEY,
     equipment_type_id INT NOT NULL REFERENCES equipment_types(id),
     model VARCHAR(255),
@@ -244,14 +255,14 @@ CREATE TABLE equipment (
 );
 
 -- Weapon types
-CREATE TABLE weapon_types (
+CREATE TABLE IF NOT EXISTS weapon_types (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     category VARCHAR(100)
 );
 
 -- Weapons
-CREATE TABLE weapons (
+CREATE TABLE IF NOT EXISTS weapons (
     id SERIAL PRIMARY KEY,
     weapon_type_id INT NOT NULL REFERENCES weapon_types(id),
     model VARCHAR(255),
@@ -268,7 +279,7 @@ CREATE TABLE weapons (
 -- =====================================================
 
 -- Facilities
-CREATE TABLE facilities (
+CREATE TABLE IF NOT EXISTS facilities (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     type VARCHAR(100), -- "Barracks", "Warehouse", "Headquarters", "Garage"
@@ -278,13 +289,31 @@ CREATE TABLE facilities (
 );
 
 -- Facility to subunits relationship (where they are deployed)
-CREATE TABLE facility_subunits (
+CREATE TABLE IF NOT EXISTS facility_subunits (
     facility_id INT REFERENCES facilities(id) ON DELETE CASCADE,
     subunit_id INT NOT NULL,
     subunit_type VARCHAR(20) NOT NULL, -- 'company', 'platoon', 'squad'
     PRIMARY KEY (facility_id, subunit_id, subunit_type),
     CHECK (subunit_type IN ('company', 'platoon', 'squad'))
 );
+
+-- 1. Створюємо таблицю "keys" (Ключі)
+CREATE TABLE IF NOT EXISTS keys (
+    id SERIAL PRIMARY KEY,
+    login VARCHAR(100) NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    role_id INT NOT NULL REFERENCES roles(id) ON UPDATE CASCADE,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 2. Переносимо існуючі дані з таблиці "users" у "keys"
+-- Припускаємо, що таблиця users має колонки login, password, role_id
+INSERT INTO keys (login, password, role_id, user_id)
+SELECT login, password, role_id, id FROM users
+ON CONFLICT (login) DO NOTHING;
+
+-- 3. Надаємо коментар (опціонально)
+COMMENT ON TABLE keys IS 'Authorization table: logins, passwords and access rights';
 
 -- =====================================================
 -- 7. ADDING FOREIGN KEYS FOR COMMANDERS
