@@ -24,44 +24,55 @@ class Database:
                     password=os.getenv("DB_PASSWORD", "postgres"),
                     cursor_factory=psycopg2.extras.DictCursor
                 )
-                print(f"✅ Підключено до БД '{os.getenv('DB_NAME')}' на {os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}")
+                # print(f"✅ Підключено до БД '{os.getenv('DB_NAME')}'")
             except Exception as e:
-                print(f"❌ Помилка підключення до БД ({os.getenv('DB_NAME')}): {e}")
+                print(f"❌ Помилка підключення до БД: {e}")
                 raise
         return self._conn
 
     def query(self, sql: str, params: Optional[Iterable[Any]] = None):
         """Виконати SELECT-запит і повернути результат"""
         conn = self.connect()
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            try:
-                rows = cur.fetchall()
-                return rows
-            except psycopg2.ProgrammingError:
-                return []
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                try:
+                    rows = cur.fetchall()
+                    return rows
+                except psycopg2.ProgrammingError:
+                    return []
+        except Exception as e:
+            conn.rollback()  # ⬅️ ВАЖЛИВО: Відкочуємо транзакцію при помилці
+            raise e
 
     def query_with_columns(self, sql: str, params: Optional[Iterable[Any]] = None) -> Tuple[List[str], list]:
         """Виконати SELECT-запит і повернути (імена колонок, дані)"""
         conn = self.connect()
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            try:
-                rows = cur.fetchall()
-                cols = [desc.name for desc in cur.description]
-                return cols, rows
-            except psycopg2.ProgrammingError:
-                return [], []
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                try:
+                    rows = cur.fetchall()
+                    cols = [desc.name for desc in cur.description]
+                    return cols, rows
+                except psycopg2.ProgrammingError:
+                    return [], []
+        except Exception as e:
+            conn.rollback()  # ⬅️ ВАЖЛИВО
+            raise e
 
     def execute(self, sql: str, params: Optional[Iterable[Any]] = None) -> int:
         """Виконати INSERT/UPDATE/DELETE"""
         conn = self.connect()
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            conn.commit()
-            return cur.rowcount
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params)
+                conn.commit()
+                return cur.rowcount
+        except Exception as e:
+            conn.rollback()  # ⬅️ ВАЖЛИВО: Якщо запис не вдався, скасовуємо зміни
+            raise e
 
-    # --- НОВИЙ МЕТОД ---
     def execute_file(self, filepath: str):
         """Виконує SQL-скрипт із вказаного файлу."""
         if not os.path.exists(filepath):
@@ -82,9 +93,8 @@ class Database:
                 conn.commit()
                 print(f"✅ Скрипт '{filepath}' успішно виконано!")
         except Exception as e:
-            conn.rollback()
+            conn.rollback()  # ⬅️ ВАЖЛИВО
             print(f"❌ Помилка при виконанні SQL з '{filepath}':\n{e}")
-    # -------------------
 
     def close(self):
         """Закрити підключення"""

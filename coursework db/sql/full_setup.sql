@@ -75,16 +75,18 @@ CREATE TABLE IF NOT EXISTS military_districts (
     code VARCHAR(50) UNIQUE
 );
 
--- Таблиця запитів на відновлення пароля
-CREATE TABLE IF NOT EXISTS password_resets (
+CREATE TABLE IF NOT EXISTS requests (
     id SERIAL PRIMARY KEY,
-    login VARCHAR(100) NOT NULL,
-    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    user_id INT REFERENCES users(id) ON DELETE CASCADE, -- Хто подав (або кого стосується)
+    login VARCHAR(100) NOT NULL, -- Дублюємо логін для зручності пошуку
+    request_type VARCHAR(50) NOT NULL, -- Типи: 'password_reset', 'role_operator', 'role_authorized'
+    status VARCHAR(50) DEFAULT 'pending', -- 'pending', 'approved', 'rejected', 'completed'
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    processed_at TIMESTAMP
+    processed_at TIMESTAMP,
+    admin_comment TEXT -- Коментар адміна при відмові/згоді
 );
 
-COMMENT ON TABLE password_resets IS 'Історія запитів на відновлення пароля';
+COMMENT ON TABLE requests IS 'Єдиний реєстр запитів (паролі, ролі, реєстрація)';
 
 -- Armies
 CREATE TABLE IF NOT EXISTS armies (
