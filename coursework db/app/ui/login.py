@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-# Використовуємо правильний шлях імпорту
 from auth import AuthService
 
 
@@ -12,11 +11,38 @@ class LoginFrame(tk.Frame):
         self.on_login = on_login
         self.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # ОДРАЗУ показуємо форму входу
-        self.show_login_form()
+        # Запускаємо стартовий екран (титульна сторінка)
+        self.create_start_screen()
+
+    def create_start_screen(self):
+        """Початковий екран (Титульна сторінка)"""
+        for w in self.winfo_children(): w.destroy()
+
+        ttk.Label(self, text="Ласкаво просимо!", font=("Arial", 16, "bold")).pack(pady=30)
+
+        # Основні кнопки навігації
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(pady=10)
+
+        ttk.Button(btn_frame, text="🔑 Вхід до системи", width=25, command=self.show_login_form).pack(pady=5)
+        ttk.Button(btn_frame, text="📝 Реєстрація нового користувача", width=25, command=self.show_register_form).pack(
+            pady=5)
+
+        ttk.Separator(self, orient='horizontal').pack(fill='x', pady=20)
+
+        # Вхід як гість
+        ttk.Button(self, text="👤 Увійти як Гість", width=25, command=self.do_guest_login).pack(pady=5)
+
+    def do_guest_login(self):
+        user = self.auth.login_as_guest()
+        if user:
+            messagebox.showinfo("Вхід", "Ви увійшли як Гість (обмежений доступ)")
+            self.on_login(user)
+        else:
+            messagebox.showerror("Помилка", "Не вдалося увійти як гість")
 
     def show_login_form(self):
-        """Головний екран входу"""
+        """Форма входу"""
         for w in self.winfo_children(): w.destroy()
 
         ttk.Label(self, text="Вхід до системи", font=("Arial", 16, "bold")).pack(pady=20)
@@ -42,32 +68,17 @@ class LoginFrame(tk.Frame):
             else:
                 messagebox.showerror("Помилка", "Невірний логін або пароль")
 
-        def do_guest_login():
-            user = self.auth.login_as_guest()
-            if user:
-                messagebox.showinfo("Вхід", "Ви увійшли як Гість")
-                self.on_login(user)
-            else:
-                messagebox.showerror("Помилка", "Не вдалося увійти як гість")
+        # Кнопка входу
+        ttk.Button(self, text="УВІЙТИ", command=do_login).pack(pady=15, fill=tk.X, padx=40)
 
-        # Основна кнопка входу
-        ttk.Button(self, text="УВІЙТИ", command=do_login).pack(pady=10, fill=tk.X, padx=40)
+        # Кнопка відновлення пароля (Тільки тут)
+        ttk.Button(self, text="❓ Забули пароль?", command=self.show_forgot_password).pack(pady=2)
 
-        # Додаткові посилання (в один ряд)
-        links_frame = ttk.Frame(self)
-        links_frame.pack(pady=5)
-
-        # Кнопка переходу на реєстрацію
-        ttk.Button(links_frame, text="📝 Реєстрація", command=self.show_register_form).pack(side=tk.LEFT, padx=5)
-        # Кнопка відновлення пароля
-        ttk.Button(links_frame, text="❓ Забули пароль?", command=self.show_forgot_password).pack(side=tk.LEFT, padx=5)
-
-        # Розділювач і вхід як гість
-        ttk.Separator(self, orient='horizontal').pack(fill='x', pady=15)
-        ttk.Button(self, text="👤 Увійти як Гість", command=do_guest_login).pack(pady=5)
+        # Кнопка Назад (на стартовий екран)
+        ttk.Button(self, text="⬅ На головну", command=self.create_start_screen).pack(side=tk.BOTTOM, pady=20)
 
     def show_register_form(self):
-        """Екран реєстрації"""
+        """Форма реєстрації"""
         for w in self.winfo_children(): w.destroy()
 
         ttk.Label(self, text="Реєстрація", font=("Arial", 16, "bold")).pack(pady=10)
@@ -89,7 +100,6 @@ class LoginFrame(tk.Frame):
 
         ttk.Label(input_frame, text="Роль:").pack(anchor="w", pady=(10, 0))
 
-        # Ролі (відображення -> значення в БД)
         role_map = {
             "Користувач (Authorized)": "Authorized",
             "Оператор (Потрібне підтвердження)": "Operator",
@@ -103,8 +113,6 @@ class LoginFrame(tk.Frame):
             login = login_entry.get().strip()
             password = password_entry.get().strip()
             email = email_entry.get().strip() or None
-
-            # Отримуємо англійську назву ролі для БД
             target_role = role_map[role_combo.get()]
 
             if not login or not password:
@@ -114,19 +122,19 @@ class LoginFrame(tk.Frame):
             try:
                 if target_role == "Operator":
                     self.auth.register_with_request(login, password, target_role, email)
-                    messagebox.showinfo("Увага", "Ваш акаунт створено як 'Гість'.\nЗапит на права Оператора надіслано.")
+                    messagebox.showinfo("Увага", "Ваш акаунт створено як 'Гість'.\nЗапит на роль Оператора надіслано.")
                 else:
                     self.auth.create_user(login, password, target_role, email)
                     messagebox.showinfo("Успіх", "Акаунт створено! Тепер увійдіть.")
 
-                self.show_login_form()
+                self.create_start_screen()  # Повертаємось на старт
             except Exception as e:
                 messagebox.showerror("Помилка", str(e))
 
         ttk.Button(self, text="ЗАРЕЄСТРУВАТИСЯ", command=do_register).pack(pady=15, fill=tk.X, padx=40)
 
-        # Кнопка повернення на Логін
-        ttk.Button(self, text="⬅ Вже маю акаунт (Увійти)", command=self.show_login_form).pack(pady=5)
+        # Кнопка Назад (на стартовий екран)
+        ttk.Button(self, text="⬅ На головну", command=self.create_start_screen).pack(side=tk.BOTTOM, pady=20)
 
     def show_forgot_password(self):
         """Екран відновлення пароля"""
@@ -136,6 +144,7 @@ class LoginFrame(tk.Frame):
 
         input_frame = ttk.Frame(self)
         input_frame.pack(pady=5)
+
         ttk.Label(input_frame, text="Ваш логін:").pack(anchor="w")
         login_entry = ttk.Entry(input_frame, width=30)
         login_entry.pack(pady=5)
@@ -166,7 +175,7 @@ class LoginFrame(tk.Frame):
             try:
                 self.auth.user_finalize_reset(login, new_pass)
                 messagebox.showinfo("Успіх", "Пароль змінено! Увійдіть.")
-                self.show_login_form()
+                self.show_login_form()  # Повертаємось на логін
             except Exception as e:
                 messagebox.showerror("Помилка", str(e))
 
@@ -199,5 +208,5 @@ class LoginFrame(tk.Frame):
 
         ttk.Button(action_frame, text="🔍 Перевірити статус / Подати", command=check_status_logic).pack()
 
-        # Кнопка повернення на Логін
+        # Кнопка Назад повертає до ФОРМИ ВХОДУ
         ttk.Button(self, text="⬅ Назад до входу", command=self.show_login_form).pack(side=tk.BOTTOM, pady=20)
