@@ -1,15 +1,18 @@
 from typing import Optional, Dict
-from passlib.hash import bcrypt
+from passlib.hash import pbkdf2_sha256
 
 class AuthService:
 	def __init__(self, db):
 		self.db = db
 
 	def hash_password(self, raw_password: str) -> str:
-		return bcrypt.hash(raw_password)
+		return pbkdf2_sha256.hash(raw_password)
 
 	def verify(self, raw_password: str, hashed: str) -> bool:
-		return raw_password == hashed
+		try:
+			return pbkdf2_sha256.verify(raw_password, hashed)
+		except Exception:
+			return False
 
 	def get_user_by_login(self, login: str) -> Optional[Dict]:
 		rows = self.db.query('SELECT u.id, u.login, u.password, u.role_id, u.confirmed, r.name AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.login=%s', [login])
@@ -20,6 +23,10 @@ class AuthService:
 		if not role:
 			raise ValueError("Role not found")
 		role_id = role[0][0]
+		pwd = self.hash_password(password)
+		return self.db.execute('INSERT INTO users (login,password,role_id,email,confirmed) VALUES (%s,%s,%s,%s,%s)', [login, pwd, role_id, email, confirmed])
+
+	def create_user_with_role_id(self, login: str, password: str, role_id: int, email: Optional[str] = None, confirmed: bool = True) -> int:
 		pwd = self.hash_password(password)
 		return self.db.execute('INSERT INTO users (login,password,role_id,email,confirmed) VALUES (%s,%s,%s,%s,%s)', [login, pwd, role_id, email, confirmed])
 

@@ -1,320 +1,373 @@
--- Повний SQL-скрипт для створення БД та всіх таблиць
--- Database: military
+-- =====================================================
+-- DATABASE: MILITARY DISTRICT
+-- =====================================================
 
--- DROP DATABASE IF EXISTS military;
+-- Drop tables in reverse order (if exist)
+DROP TABLE IF EXISTS access_requests CASCADE;
+DROP TABLE IF EXISTS personnel_specialties CASCADE;
+DROP TABLE IF EXISTS generals_info CASCADE;
+DROP TABLE IF EXISTS facility_subunits CASCADE;
+DROP TABLE IF EXISTS facilities CASCADE;
+DROP TABLE IF EXISTS locations CASCADE;
+DROP TABLE IF EXISTS weapons CASCADE;
+DROP TABLE IF EXISTS weapon_types CASCADE;
+DROP TABLE IF EXISTS equipment CASCADE;
+DROP TABLE IF EXISTS equipment_types CASCADE;
+DROP TABLE IF EXISTS military_personnel CASCADE;
+DROP TABLE IF EXISTS specialties CASCADE;
+DROP TABLE IF EXISTS ranks CASCADE;
+DROP TABLE IF EXISTS personnel_categories CASCADE;
+DROP TABLE IF EXISTS squads CASCADE;
+DROP TABLE IF EXISTS platoons CASCADE;
+DROP TABLE IF EXISTS companies CASCADE;
+DROP TABLE IF EXISTS military_units CASCADE;
+DROP TABLE IF EXISTS divisions CASCADE;
+DROP TABLE IF EXISTS corps CASCADE;
+DROP TABLE IF EXISTS armies CASCADE;
+DROP TABLE IF EXISTS military_districts CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS roles CASCADE;
 
-CREATE DATABASE military
-    WITH
-    OWNER = postgres
-    ENCODING = 'UTF8'
-    LC_COLLATE = 'Ukrainian_Ukraine.1251'
-    LC_CTYPE = 'Ukrainian_Ukraine.1251'
-    LOCALE_PROVIDER = 'libc'
-    TABLESPACE = pg_default
-    CONNECTION LIMIT = -1
-    IS_TEMPLATE = False;
+-- =====================================================
+-- 1. USER SYSTEM
+-- =====================================================
 
--- Підключитися до БД military перед виконанням наступних команд
-\c military;
-
--- Створення всіх таблиць
-CREATE TABLE IF NOT EXISTS "роль" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"назва" TEXT NOT NULL UNIQUE,
-	"опис" TEXT
+-- User roles
+CREATE TABLE roles (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL UNIQUE
 );
 
-CREATE TABLE IF NOT EXISTS "користувач" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"логін" TEXT NOT NULL UNIQUE,
-	"пароль" TEXT NOT NULL,
-	"роль_id" BIGINT NOT NULL REFERENCES "роль"("id") ON UPDATE CASCADE,
-	"email" TEXT,
-	"телефон" TEXT,
-	"підтверджено" BOOLEAN NOT NULL DEFAULT FALSE,
-	"дата_створення" TIMESTAMP NOT NULL DEFAULT NOW()
+INSERT INTO roles (name) VALUES
+    ('Guest'),
+    ('Administrator'),
+    ('Operator'),
+    ('Authorized');
+
+-- Users
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    login VARCHAR(100) NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    email VARCHAR(255),
+    role_id INT NOT NULL REFERENCES roles(id),
+    confirmed BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Ієрархія формувань
-CREATE TABLE IF NOT EXISTS "військовий_округ" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"назва" TEXT NOT NULL UNIQUE,
-	"штаб" TEXT,
-	"командувач" TEXT
+-- Access requests
+CREATE TABLE access_requests (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    comment TEXT,
+    status VARCHAR(50) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS "армія" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"номер" INTEGER NOT NULL,
-	"назва" TEXT,
-	"військовий_округ_id" BIGINT NOT NULL REFERENCES "військовий_округ"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-	UNIQUE ("військовий_округ_id", "номер")
+-- =====================================================
+-- 2. MILITARY UNIT HIERARCHY
+-- =====================================================
+
+-- Military districts
+CREATE TABLE military_districts (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(50) UNIQUE
 );
 
-CREATE TABLE IF NOT EXISTS "корпус" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"номер" INTEGER NOT NULL,
-	"армія_id" BIGINT NOT NULL REFERENCES "армія"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-	UNIQUE ("армія_id", "номер")
+-- Armies
+CREATE TABLE armies (
+    id SERIAL PRIMARY KEY,
+    number VARCHAR(50) NOT NULL,
+    name VARCHAR(255),
+    military_district_id INT NOT NULL REFERENCES military_districts(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS "дивізія" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"номер" INTEGER NOT NULL,
-	"тип" TEXT NOT NULL,
-	"корпус_id" BIGINT NOT NULL REFERENCES "корпус"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-	UNIQUE ("корпус_id", "номер")
+-- Corps
+CREATE TABLE corps (
+    id SERIAL PRIMARY KEY,
+    number VARCHAR(50) NOT NULL,
+    name VARCHAR(255),
+    army_id INT NOT NULL REFERENCES armies(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS "військова_частина" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"номер" TEXT NOT NULL,
-	"назва" TEXT,
-	"дивізія_id" BIGINT NOT NULL REFERENCES "дивізія"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-	UNIQUE ("дивізія_id", "номер")
+-- Divisions
+CREATE TABLE divisions (
+    id SERIAL PRIMARY KEY,
+    number VARCHAR(50) NOT NULL,
+    name VARCHAR(255),
+    corps_id INT NOT NULL REFERENCES corps(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS "підрозділ" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"тип" TEXT NOT NULL,
-	"назва" TEXT,
-	"військова_частина_id" BIGINT NOT NULL REFERENCES "військова_частина"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+-- Deployment locations
+CREATE TABLE locations (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    address TEXT,
+    region VARCHAR(100),
+    coordinates VARCHAR(100)
 );
 
--- Персонал
-CREATE TABLE IF NOT EXISTS "військовослужбовець" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"прізвище" TEXT NOT NULL,
-	"ім'я" TEXT NOT NULL,
-	"по_батькові" TEXT,
-	"звання" TEXT NOT NULL,
-	"посада" TEXT,
-	"дата_народження" DATE,
-	"дата_прийняття" DATE,
-	"підрозділ_id" BIGINT NOT NULL REFERENCES "підрозділ"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-	"військова_частина_id" BIGINT NOT NULL REFERENCES "військова_частина"("id") ON DELETE RESTRICT ON UPDATE CASCADE
+-- Military units
+CREATE TABLE military_units (
+    id SERIAL PRIMARY KEY,
+    number VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    division_id INT NOT NULL REFERENCES divisions(id) ON DELETE CASCADE,
+    location_id INT REFERENCES locations(id),
+    commander_id INT -- will be filled after military_personnel creation
 );
 
--- Техніка
-CREATE TABLE IF NOT EXISTS "тип_техніки" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"назва" TEXT NOT NULL UNIQUE
+-- =====================================================
+-- 3. INTERNAL UNIT STRUCTURE
+-- =====================================================
+
+-- Companies
+CREATE TABLE companies (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    military_unit_id INT NOT NULL REFERENCES military_units(id) ON DELETE CASCADE,
+    commander_id INT
 );
 
-CREATE TABLE IF NOT EXISTS "техніка" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"інвентарний_номер" TEXT NOT NULL UNIQUE,
-	"модель" TEXT NOT NULL,
-	"тип_техніки_id" BIGINT NOT NULL REFERENCES "тип_техніки"("id") ON UPDATE CASCADE,
-	"рік_випуску" INTEGER CHECK ("рік_випуску" BETWEEN 1940 AND EXTRACT(YEAR FROM NOW())::INT),
-	"стан" TEXT NOT NULL DEFAULT 'справна',
-	"військова_частина_id" BIGINT REFERENCES "військова_частина"("id") ON DELETE SET NULL ON UPDATE CASCADE,
-	"підрозділ_id" BIGINT REFERENCES "підрозділ"("id") ON DELETE SET NULL ON UPDATE CASCADE
+-- Platoons
+CREATE TABLE platoons (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    commander_id INT
 );
 
--- Озброєння
-CREATE TABLE IF NOT EXISTS "тип_озброєння" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"назва" TEXT NOT NULL UNIQUE
+-- Squads
+CREATE TABLE squads (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    platoon_id INT NOT NULL REFERENCES platoons(id) ON DELETE CASCADE,
+    commander_id INT
 );
 
-CREATE TABLE IF NOT EXISTS "озброєння" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"серійний_номер" TEXT NOT NULL UNIQUE,
-	"модель" TEXT NOT NULL,
-	"тип_озброєння_id" BIGINT NOT NULL REFERENCES "тип_озброєння"("id") ON UPDATE CASCADE,
-	"стан" TEXT NOT NULL DEFAULT 'справне',
-	"військова_частина_id" BIGINT REFERENCES "військова_частина"("id") ON DELETE SET NULL ON UPDATE CASCADE,
-	"підрозділ_id" BIGINT REFERENCES "підрозділ"("id") ON DELETE SET NULL ON UPDATE CASCADE
+-- =====================================================
+-- 4. MILITARY PERSONNEL
+-- =====================================================
+
+-- Personnel categories
+CREATE TABLE personnel_categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE
 );
 
--- Споруди
-CREATE TABLE IF NOT EXISTS "споруда" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"назва" TEXT NOT NULL,
-	"тип" TEXT NOT NULL,
-	"адреса" TEXT,
-	"військова_частина_id" BIGINT REFERENCES "військова_частина"("id") ON DELETE SET NULL ON UPDATE CASCADE
+INSERT INTO personnel_categories (name) VALUES
+    ('Officer Staff'),
+    ('Sergeant Staff'),
+    ('Private Staff');
+
+-- Ranks
+CREATE TABLE ranks (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    category_id INT NOT NULL REFERENCES personnel_categories(id)
 );
 
--- Заявки гостей на доступ
-CREATE TABLE IF NOT EXISTS "заявка_доступу" (
-	"id" BIGSERIAL PRIMARY KEY,
-	"користувач_id" BIGINT NOT NULL REFERENCES "користувач"("id") ON DELETE CASCADE ON UPDATE CASCADE,
-	"статус" TEXT NOT NULL DEFAULT 'новий',
-	"дата_створення" TIMESTAMP NOT NULL DEFAULT NOW(),
-	"коментар" TEXT
+INSERT INTO ranks (name, category_id) VALUES
+    -- Officers
+    ('General', 1),
+    ('Colonel', 1),
+    ('Lieutenant Colonel', 1),
+    ('Major', 1),
+    ('Captain', 1),
+    ('Lieutenant', 1),
+    -- Sergeants
+    ('Master Sergeant', 2),
+    ('Sergeant', 2),
+    ('Warrant Officer', 2),
+    -- Privates
+    ('Corporal', 3),
+    ('Private', 3);
+
+-- Military specialties
+CREATE TABLE specialties (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(50) UNIQUE
 );
 
--- Індекси
-CREATE INDEX IF NOT EXISTS idx_армія_округ ON "армія" ("військовий_округ_id");
-CREATE INDEX IF NOT EXISTS idx_корпус_армія ON "корпус" ("армія_id");
-CREATE INDEX IF NOT EXISTS idx_дивізія_корпус ON "дивізія" ("корпус_id");
-CREATE INDEX IF NOT EXISTS idx_частина_дивізія ON "військова_частина" ("дивізія_id");
-CREATE INDEX IF NOT EXISTS idx_підрозділ_частина ON "підрозділ" ("військова_частина_id");
-CREATE INDEX IF NOT EXISTS idx_військовослужбовець_підрозділ ON "військовослужбовець" ("підрозділ_id");
-CREATE INDEX IF NOT EXISTS idx_техніка_частина ON "техніка" ("військова_частина_id");
-CREATE INDEX IF NOT EXISTS idx_озброєння_частина ON "озброєння" ("військова_частина_id");
+-- Military personnel
+CREATE TABLE military_personnel (
+    id SERIAL PRIMARY KEY,
+    last_name VARCHAR(100) NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    middle_name VARCHAR(100),
+    rank_id INT NOT NULL REFERENCES ranks(id),
+    military_unit_id INT NOT NULL REFERENCES military_units(id) ON DELETE CASCADE,
+    subunit_id INT, -- Subunit ID (company/platoon/squad)
+    subunit_type VARCHAR(20), -- 'company', 'platoon', 'squad'
+    enlistment_date DATE,
+    birth_date DATE,
+    CHECK (subunit_type IN ('company', 'platoon', 'squad', NULL))
+);
 
--- ========== ПОЧАТКОВІ ДАНІ ==========
+-- Additional data for generals
+CREATE TABLE generals_info (
+    personnel_id INT PRIMARY KEY REFERENCES military_personnel(id) ON DELETE CASCADE,
+    academy_graduation_date DATE,
+    general_rank_date DATE,
+    academy_name VARCHAR(255)
+);
 
--- Ролі користувачів
-INSERT INTO "роль" ("назва", "опис") VALUES
-	('Адміністратор', 'Повний доступ до системи'),
-	('Оператор', 'CRUD операції, пошук, виконання запитів'),
-	('Авторизований', 'Перегляд даних, пошук, вбудовані запити'),
-	('Гість', 'Перегляд даних, подача заявок на доступ')
-ON CONFLICT ("назва") DO NOTHING;
+-- Personnel to specialties relationship (many-to-many)
+CREATE TABLE personnel_specialties (
+    personnel_id INT REFERENCES military_personnel(id) ON DELETE CASCADE,
+    specialty_id INT REFERENCES specialties(id) ON DELETE CASCADE,
+    PRIMARY KEY (personnel_id, specialty_id)
+);
 
--- Адміністратор (пароль: admin123)
-INSERT INTO "користувач" ("логін", "пароль", "роль_id", "email", "підтверджено")
-SELECT 'admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LeaLgBN4tk3Dk9c9K', r."id", 'admin@military.gov.ua', TRUE
-FROM "роль" r WHERE r."назва"='Адміністратор'
-ON CONFLICT ("логін") DO NOTHING;
+-- =====================================================
+-- 5. EQUIPMENT AND WEAPONS
+-- =====================================================
 
--- Тестовий оператор (пароль: operator123)
-INSERT INTO "користувач" ("логін", "пароль", "роль_id", "email", "підтверджено")
-SELECT 'operator', '$2b$12$8Ec0oJXXhYAOGx5PnqFOWuEP7yB.bPdY6i3F0nGjRgC3LMNgKJh7K', r."id", 'operator@military.gov.ua', TRUE
-FROM "роль" r WHERE r."назва"='Оператор'
-ON CONFLICT ("логін") DO NOTHING;
+-- Equipment types
+CREATE TABLE equipment_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    category VARCHAR(100) -- "Combat Vehicle", "Transport Vehicle"
+);
 
--- Військові округи
-INSERT INTO "військовий_округ" ("назва", "штаб", "командувач") VALUES
-	('Східний військовий округ', 'м. Дніпро', 'генерал-лейтенант Іваненко І.І.'),
-	('Західний військовий округ', 'м. Львів', 'генерал-лейтенант Петренко П.П.'),
-	('Південний військовий округ', 'м. Одеса', 'генерал-лейтенант Сидоренко С.С.'),
-	('Північний військовий округ', 'м. Чернігів', 'генерал-лейтенант Коваленко К.К.')
-ON CONFLICT ("назва") DO NOTHING;
+-- Equipment
+CREATE TABLE equipment (
+    id SERIAL PRIMARY KEY,
+    equipment_type_id INT NOT NULL REFERENCES equipment_types(id),
+    model VARCHAR(255),
+    serial_number VARCHAR(100),
+    year_manufactured INT,
+    military_unit_id INT NOT NULL REFERENCES military_units(id) ON DELETE CASCADE,
+    condition VARCHAR(50)
+);
 
--- Армії
-INSERT INTO "армія" ("номер", "назва", "військовий_округ_id")
-SELECT 1, '1-ша танкова армія', в."id" FROM "військовий_округ" в WHERE в."назва"='Східний військовий округ'
-UNION ALL
-SELECT 2, '2-га механізована армія', в."id" FROM "військовий_округ" в WHERE в."назва"='Східний військовий округ'
-UNION ALL
-SELECT 3, '3-тя повітряно-десантна армія', в."id" FROM "військовий_округ" в WHERE в."назва"='Західний військовий округ'
-UNION ALL
-SELECT 4, '4-та артилерійська армія', в."id" FROM "військовий_округ" в WHERE в."назва"='Південний військовий округ'
-ON CONFLICT ("військовий_округ_id", "номер") DO NOTHING;
+-- Weapon types
+CREATE TABLE weapon_types (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    category VARCHAR(100)
+);
 
--- Корпуси
-INSERT INTO "корпус" ("номер", "армія_id")
-SELECT 1, а."id" FROM "армія" а WHERE а."номер"=1
-UNION ALL
-SELECT 2, а."id" FROM "армія" а WHERE а."номер"=1
-UNION ALL
-SELECT 1, а."id" FROM "армія" а WHERE а."номер"=2
-UNION ALL
-SELECT 1, а."id" FROM "армія" а WHERE а."номер"=3
-ON CONFLICT ("армія_id", "номер") DO NOTHING;
+-- Weapons
+CREATE TABLE weapons (
+    id SERIAL PRIMARY KEY,
+    weapon_type_id INT NOT NULL REFERENCES weapon_types(id),
+    model VARCHAR(255),
+    serial_number VARCHAR(100),
+    caliber VARCHAR(50),
+    military_unit_id INT NOT NULL REFERENCES military_units(id) ON DELETE CASCADE,
+    subunit_id INT, -- may belong to a subunit
+    subunit_type VARCHAR(20),
+    CHECK (subunit_type IN ('company', 'platoon', 'squad', NULL))
+);
 
--- Дивізії
-INSERT INTO "дивізія" ("номер", "тип", "корпус_id")
-SELECT 1, 'танкова', к."id" FROM "корпус" к JOIN "армія" а ON а."id"=к."армія_id" WHERE а."номер"=1 AND к."номер"=1
-UNION ALL
-SELECT 2, 'механізована', к."id" FROM "корпус" к JOIN "армія" а ON а."id"=к."армія_id" WHERE а."номер"=1 AND к."номер"=1
-UNION ALL
-SELECT 1, 'артилерійська', к."id" FROM "корпус" к JOIN "армія" а ON а."id"=к."армія_id" WHERE а."номер"=1 AND к."номер"=2
-UNION ALL
-SELECT 1, 'повітряно-десантна', к."id" FROM "корпус" к JOIN "армія" а ON а."id"=к."армія_id" WHERE а."номер"=3 AND к."номер"=1
-ON CONFLICT ("корпус_id", "номер") DO NOTHING;
+-- =====================================================
+-- 6. INFRASTRUCTURE
+-- =====================================================
 
--- Військові частини
-INSERT INTO "військова_частина" ("номер", "назва", "дивізія_id")
-SELECT 'А1234', '15-та танкова бригада', д."id" 
-FROM "дивізія" д JOIN "корпус" к ON к."id"=д."корпус_id" JOIN "армія" а ON а."id"=к."армія_id" 
-WHERE а."номер"=1 AND к."номер"=1 AND д."номер"=1
-UNION ALL
-SELECT 'А5678', '23-тя механізована бригада', д."id"
-FROM "дивізія" д JOIN "корпус" к ON к."id"=д."корпус_id" JOIN "армія" а ON а."id"=к."армія_id"
-WHERE а."номер"=1 AND к."номер"=1 AND д."номер"=2
-UNION ALL
-SELECT 'А9999', '7-ма артилерійська бригада', д."id"
-FROM "дивізія" д JOIN "корпус" к ON к."id"=д."корпус_id" JOIN "армія" а ON а."id"=к."армія_id"
-WHERE а."номер"=1 AND к."номер"=2 AND д."номер"=1
-ON CONFLICT ("дивізія_id", "номер") DO NOTHING;
+-- Facilities
+CREATE TABLE facilities (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    type VARCHAR(100), -- "Barracks", "Warehouse", "Headquarters", "Garage"
+    address TEXT,
+    military_unit_id INT NOT NULL REFERENCES military_units(id) ON DELETE CASCADE,
+    location_id INT REFERENCES locations(id)
+);
 
--- Підрозділи
-INSERT INTO "підрозділ" ("тип", "назва", "військова_частина_id")
-SELECT 'батальйон', '1-й танковий батальйон', ч."id" FROM "військова_частина" ч WHERE ч."номер"='А1234'
-UNION ALL
-SELECT 'батальйон', '2-й танковий батальйон', ч."id" FROM "військова_частина" ч WHERE ч."номер"='А1234'
-UNION ALL
-SELECT 'рота', '1-ша розвідувальна рота', ч."id" FROM "військова_частина" ч WHERE ч."номер"='А1234'
-UNION ALL
-SELECT 'батальйон', '1-й механізований батальйон', ч."id" FROM "військова_частина" ч WHERE ч."номер"='А5678'
-UNION ALL
-SELECT 'дивізіон', '1-й артилерійський дивізіон', ч."id" FROM "військова_частина" ч WHERE ч."номер"='А9999';
+-- Facility to subunits relationship (where they are deployed)
+CREATE TABLE facility_subunits (
+    facility_id INT REFERENCES facilities(id) ON DELETE CASCADE,
+    subunit_id INT NOT NULL,
+    subunit_type VARCHAR(20) NOT NULL, -- 'company', 'platoon', 'squad'
+    PRIMARY KEY (facility_id, subunit_id, subunit_type),
+    CHECK (subunit_type IN ('company', 'platoon', 'squad'))
+);
 
--- Типи техніки
-INSERT INTO "тип_техніки" ("назва") VALUES
-	('Танки'),
-	('БТР'),
-	('БМП'),
-	('Артилерія'),
-	('Автомобілі'),
-	('Інженерна техніка')
-ON CONFLICT ("назва") DO NOTHING;
+-- =====================================================
+-- 7. ADDING FOREIGN KEYS FOR COMMANDERS
+-- =====================================================
 
--- Типи озброєння
-INSERT INTO "тип_озброєння" ("назва") VALUES
-	('Стрілецька зброя'),
-	('Гранатомети'),
-	('ПЗРК'),
-	('Міномети'),
-	('Кулемети'),
-	('Снайперські гвинтівки')
-ON CONFLICT ("назва") DO NOTHING;
+ALTER TABLE military_units
+    ADD CONSTRAINT fk_military_units_commander
+    FOREIGN KEY (commander_id) REFERENCES military_personnel(id);
 
--- Приклади техніки
-INSERT INTO "техніка" ("інвентарний_номер", "модель", "тип_техніки_id", "рік_випуску", "стан", "військова_частина_id")
-SELECT 'Т001', 'Т-64БВ', тт."id", 2018, 'справна', ч."id"
-FROM "тип_техніки" тт, "військова_частина" ч 
-WHERE тт."назва"='Танки' AND ч."номер"='А1234'
-UNION ALL
-SELECT 'Т002', 'Т-72АМТ', тт."id", 2020, 'справна', ч."id"
-FROM "тип_техніки" тт, "військова_частина" ч
-WHERE тт."назва"='Танки' AND ч."номер"='А1234'
-UNION ALL
-SELECT 'Б001', 'БТР-4Е', тт."id", 2019, 'справна', ч."id"
-FROM "тип_техніки" тт, "військова_частина" ч
-WHERE тт."назва"='БТР' AND ч."номер"='А5678'
-ON CONFLICT ("інвентарний_номер") DO NOTHING;
+ALTER TABLE companies
+    ADD CONSTRAINT fk_companies_commander
+    FOREIGN KEY (commander_id) REFERENCES military_personnel(id);
 
--- Приклади озброєння
-INSERT INTO "озброєння" ("серійний_номер", "модель", "тип_озброєння_id", "стан", "військова_частина_id")
-SELECT 'АК001', 'АК-74М', то."id", 'справне', ч."id"
-FROM "тип_озброєння" то, "військова_частина" ч
-WHERE то."назва"='Стрілецька зброя' AND ч."номер"='А1234'
-UNION ALL
-SELECT 'РПГ001', 'РПГ-7В', то."id", 'справне', ч."id"
-FROM "тип_озброєння" то, "військова_частина" ч
-WHERE то."назва"='Гранатомети' AND ч."номер"='А1234'
-ON CONFLICT ("серійний_номер") DO NOTHING;
+ALTER TABLE platoons
+    ADD CONSTRAINT fk_platoons_commander
+    FOREIGN KEY (commander_id) REFERENCES military_personnel(id);
 
--- Приклади військовослужбовців
-INSERT INTO "військовослужбовець" ("прізвище", "ім'я", "по_батькові", "звання", "посада", "дата_народження", "дата_прийняття", "підрозділ_id", "військова_частина_id")
-SELECT 'Шевченко', 'Тарас', 'Григорович', 'майор', 'командир батальйону', '1985-03-09', '2020-01-15', п."id", ч."id"
-FROM "підрозділ" п, "військова_частина" ч
-WHERE п."назва"='1-й танковий батальйон' AND ч."номер"='А1234'
-UNION ALL
-SELECT 'Франко', 'Іван', 'Якович', 'капітан', 'заступник командира', '1990-07-22', '2021-06-10', п."id", ч."id"
-FROM "підрозділ" п, "військова_частина" ч
-WHERE п."назва"='1-й танковий батальйон' AND ч."номер"='А1234'
-UNION ALL
-SELECT 'Лесь', 'Українка', 'Петрівна', 'лейтенант', 'командир взводу', '1995-02-25', '2022-03-01', п."id", ч."id"
-FROM "підрозділ" п, "військова_частина" ч
-WHERE п."назва"='1-ша розвідувальна рота' AND ч."номер"='А1234';
+ALTER TABLE squads
+    ADD CONSTRAINT fk_squads_commander
+    FOREIGN KEY (commander_id) REFERENCES military_personnel(id);
 
--- Приклади споруд
-INSERT INTO "споруда" ("назва", "тип", "адреса", "військова_частина_id")
-SELECT 'Склад №1', 'склад', 'вул. Військова, 15', ч."id"
-FROM "військова_частина" ч WHERE ч."номер"='А1234'
-UNION ALL
-SELECT 'Штаб бригади', 'штаб', 'вул. Центральна, 1', ч."id"
-FROM "військова_частина" ч WHERE ч."номер"='А1234'
-UNION ALL
-SELECT 'Полігон для стрільб', 'полігон', 'Навчальний полігон №3', ч."id"
-FROM "військова_частина" ч WHERE ч."номер"='А1234';
+-- =====================================================
+-- 8. INDEXES FOR QUERY OPTIMIZATION
+-- =====================================================
 
--- Завершено створення БД та наповнення початковими даними
+CREATE INDEX idx_military_personnel_rank ON military_personnel(rank_id);
+CREATE INDEX idx_military_personnel_unit ON military_personnel(military_unit_id);
+CREATE INDEX idx_equipment_unit ON equipment(military_unit_id);
+CREATE INDEX idx_weapons_unit ON weapons(military_unit_id);
+CREATE INDEX idx_facilities_unit ON facilities(military_unit_id);
+CREATE INDEX idx_armies_district ON armies(military_district_id);
+CREATE INDEX idx_corps_army ON corps(army_id);
+CREATE INDEX idx_divisions_corps ON divisions(corps_id);
+CREATE INDEX idx_military_units_division ON military_units(division_id);
+
+-- =====================================================
+-- 9. SAMPLE DATA
+-- =====================================================
+
+-- Military district
+INSERT INTO military_districts (name, code) VALUES
+    ('Eastern Military District', 'EAST-01');
+
+-- Army
+INSERT INTO armies (number, name, military_district_id) VALUES
+    ('5th', '5th Combined Arms Army', 1);
+
+-- Corps
+INSERT INTO corps (number, name, army_id) VALUES
+    ('1st', '1st Army Corps', 1);
+
+-- Division
+INSERT INTO divisions (number, name, corps_id) VALUES
+    ('10th', '10th Mechanized Division', 1);
+
+-- Deployment location
+INSERT INTO locations (name, address, region) VALUES
+    ('Kyiv City', '1 Khreshchatyk Street', 'Kyiv Region');
+
+-- Military unit
+INSERT INTO military_units (number, name, division_id, location_id) VALUES
+    ('A1234', '15th Separate Mechanized Brigade', 1, 1);
+
+-- Specialties
+INSERT INTO specialties (name, code) VALUES
+    ('Tank Operator', 'TANK-01'),
+    ('Sniper', 'SNIP-01'),
+    ('Communications Specialist', 'COMM-01');
+
+-- Equipment types
+INSERT INTO equipment_types (name, category) VALUES
+    ('BMP-2', 'Combat Vehicle'),
+    ('T-64', 'Combat Vehicle'),
+    ('KamAZ', 'Transport Vehicle');
+
+-- Weapon types
+INSERT INTO weapon_types (name, category) VALUES
+    ('AK-74', 'Automatic Weapon'),
+    ('SVD', 'Sniper Rifle'),
+    ('RPG-7', 'Anti-Tank Weapon');
+
+-- =====================================================
+-- END OF SCRIPT
+-- =====================================================
+
+COMMENT ON DATABASE postgres IS 'Military District Database';

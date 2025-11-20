@@ -2,7 +2,8 @@ import tkinter as tk
 from tkinter import ttk
 from db import Database
 from ui.login import LoginFrame
-from app.ui.main import MainFrame  # твій головний екран після логіну
+from ui.main import MainFrame
+from ui.queries import QueriesFrame
 
 class App(tk.Tk):
     def __init__(self):
@@ -24,7 +25,6 @@ class App(tk.Tk):
         self._swap(LoginFrame(self, self.db, on_login=self.show_main_screen))
 
     def show_main_screen(self, user):
-        from app.ui.main import MainFrame
         self._swap(MainFrame(self, self.db, user, on_logout=self.show_login_screen))
 
 
