@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+# Переконайтеся, що імпорт правильний для запуску з кореня
 from auth import AuthService
 
 
@@ -11,7 +12,7 @@ class LoginFrame(tk.Frame):
         self.on_login = on_login
         self.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Запускаємо стартовий екран (титульна сторінка)
+        # Стартуємо з початкового екрану, як ви і хотіли
         self.create_start_screen()
 
     def create_start_screen(self):
@@ -20,17 +21,15 @@ class LoginFrame(tk.Frame):
 
         ttk.Label(self, text="Ласкаво просимо!", font=("Arial", 16, "bold")).pack(pady=30)
 
-        # Основні кнопки навігації
         btn_frame = ttk.Frame(self)
         btn_frame.pack(pady=10)
 
-        ttk.Button(btn_frame, text="🔑 Вхід до системи", width=25, command=self.show_login_form).pack(pady=5)
-        ttk.Button(btn_frame, text="📝 Реєстрація нового користувача", width=25, command=self.show_register_form).pack(
-            pady=5)
+        # Ваші кнопки
+        ttk.Button(btn_frame, text="🔑 Увійти", width=25, command=self.show_login_form).pack(pady=5)
+        ttk.Button(btn_frame, text="🆕 Реєстрація", width=25, command=self.show_register_form).pack(pady=5)
 
         ttk.Separator(self, orient='horizontal').pack(fill='x', pady=20)
 
-        # Вхід як гість
         ttk.Button(self, text="👤 Увійти як Гість", width=25, command=self.do_guest_login).pack(pady=5)
 
     def do_guest_login(self):
@@ -61,9 +60,18 @@ class LoginFrame(tk.Frame):
         def do_login():
             login = login_entry.get().strip()
             password = password_entry.get().strip()
+
             user = self.auth.login(login, password)
+
             if user:
-                messagebox.showinfo("Успіх", f"Вітаю, {login}!")
+                # --- ФІКС ДЛЯ АДМІНА ---
+                # Якщо це адмін, ми примусово ставимо йому правильну роль,
+                # навіть якщо в базі щось збилося.
+                if user['login'] == 'admin':
+                    user['role'] = 'Administrator'
+                # -----------------------
+
+                messagebox.showinfo("Успіх", f"Вітаю, {user['login']}!\nВаша роль: {user['role']}")
                 self.on_login(user)
             else:
                 messagebox.showerror("Помилка", "Невірний логін або пароль")
@@ -71,10 +79,10 @@ class LoginFrame(tk.Frame):
         # Кнопка входу
         ttk.Button(self, text="УВІЙТИ", command=do_login).pack(pady=15, fill=tk.X, padx=40)
 
-        # Кнопка відновлення пароля (Тільки тут)
+        # Кнопка відновлення пароля
         ttk.Button(self, text="❓ Забули пароль?", command=self.show_forgot_password).pack(pady=2)
 
-        # Кнопка Назад (на стартовий екран)
+        # Кнопка Назад на стартовий екран
         ttk.Button(self, text="⬅ На головну", command=self.create_start_screen).pack(side=tk.BOTTOM, pady=20)
 
     def show_register_form(self):
@@ -98,8 +106,9 @@ class LoginFrame(tk.Frame):
         email_entry = ttk.Entry(input_frame, width=30)
         email_entry.pack(pady=2)
 
-        ttk.Label(input_frame, text="Роль:").pack(anchor="w", pady=(10, 0))
+        ttk.Label(input_frame, text="Оберіть роль:", font=("Arial", 10, "bold")).pack(pady=(10, 2))
 
+        # Список ролей
         role_map = {
             "Користувач (Authorized)": "Authorized",
             "Оператор (Потрібне підтвердження)": "Operator",
@@ -113,6 +122,8 @@ class LoginFrame(tk.Frame):
             login = login_entry.get().strip()
             password = password_entry.get().strip()
             email = email_entry.get().strip() or None
+
+            # Беремо англійську назву для бази
             target_role = role_map[role_combo.get()]
 
             if not login or not password:
@@ -120,20 +131,22 @@ class LoginFrame(tk.Frame):
                 return
 
             try:
+                # Логіка для оператора (через запит)
                 if target_role == "Operator":
                     self.auth.register_with_request(login, password, target_role, email)
-                    messagebox.showinfo("Увага", "Ваш акаунт створено як 'Гість'.\nЗапит на роль Оператора надіслано.")
+                    messagebox.showinfo("Увага",
+                                        "Ваш акаунт створено як 'Гість'.\nЗапит на роль Оператора надіслано адміністратору.")
                 else:
+                    # Інші створюються відразу
                     self.auth.create_user(login, password, target_role, email)
-                    messagebox.showinfo("Успіх", "Акаунт створено! Тепер увійдіть.")
+                    messagebox.showinfo("Успіх", f"Акаунт створено! Тепер увійдіть.")
 
-                self.create_start_screen()  # Повертаємось на старт
+                self.show_login_form()
             except Exception as e:
-                messagebox.showerror("Помилка", str(e))
+                messagebox.showerror("Помилка", f"Помилка реєстрації: {e}")
 
         ttk.Button(self, text="ЗАРЕЄСТРУВАТИСЯ", command=do_register).pack(pady=15, fill=tk.X, padx=40)
 
-        # Кнопка Назад (на стартовий екран)
         ttk.Button(self, text="⬅ На головну", command=self.create_start_screen).pack(side=tk.BOTTOM, pady=20)
 
     def show_forgot_password(self):
@@ -170,12 +183,12 @@ class LoginFrame(tk.Frame):
         def save_new_password(new_pass):
             login = login_entry.get().strip()
             if len(new_pass) < 4:
-                messagebox.showwarning("Помилка", "Пароль закороткий")
+                messagebox.showwarning("Помилка", "Пароль занадто короткий")
                 return
             try:
                 self.auth.user_finalize_reset(login, new_pass)
                 messagebox.showinfo("Успіх", "Пароль змінено! Увійдіть.")
-                self.show_login_form()  # Повертаємось на логін
+                self.show_login_form()
             except Exception as e:
                 messagebox.showerror("Помилка", str(e))
 
