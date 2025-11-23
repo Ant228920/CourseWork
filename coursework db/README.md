@@ -102,8 +102,6 @@ DB_PASSWORD=your_password
 # Створення схеми та таблиць
 psql -U postgres -d military_district_db -f sql/full_setup.sql
 
-# Додавання тестових даних
-psql -U postgres -d military_district_db -f sql/seed_en.sql
 
 # Додавання валідації та обмежень
 psql -U postgres -d military_district_db -f sql/validation.sql
@@ -131,9 +129,6 @@ psql -U postgres -d military_district_db -f sql/validation.sql
 │       └── queries.py     # Інтерфейс запитів
 ├── sql/                   # SQL скрипти
 │   ├── full_setup.sql    # Повне налаштування БД
-│   ├── schema_en.sql     # Схема БД
-│   ├── seed_en.sql       # Тестові дані
-│   ├── queries_en.sql    # Всі 10 типів запитів
 │   └── validation.sql    # Валідація та обмеження
 ├── docs/                 # Документація
 │   └── ERD.md           # ER-діаграма
