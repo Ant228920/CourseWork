@@ -12,186 +12,193 @@ class CRUDFrame(tk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
-        # Entity selection
+        # Верхня панель: Вибір таблиці
+        top_panel = ttk.Frame(self, padding=5)
+        top_panel.grid(row=0, column=0, sticky="ew")
+
+        ttk.Label(top_panel, text="Оберіть таблицю для редагування:").pack(side=tk.LEFT, padx=5)
+
         self.entity_var = tk.StringVar()
-        self.entity_combo = ttk.Combobox(self, textvariable=self.entity_var, state="readonly")
-        self.entity_combo.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
+        self.entity_combo = ttk.Combobox(top_panel, textvariable=self.entity_var, state="readonly", width=40)
+        self.entity_combo.pack(side=tk.LEFT, padx=5)
         self.entity_combo.bind("<<ComboboxSelected>>", self._on_entity_select)
 
-        # Main content area
+        # Основна область контенту
         self.content_frame = ttk.Frame(self)
-        self.content_frame.grid(row=1, column=0, sticky="nsew", padx=8, pady=6)
+        self.content_frame.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.content_frame.columnconfigure(0, weight=1)
-        self.content_frame.rowconfigure(0, weight=1)
+        self.content_frame.rowconfigure(2, weight=1)  # Таблиця розтягується
 
-        # Define entities and their configurations
+        # ========================================================
+        # КОНФІГУРАЦІЯ ТАБЛИЦЬ (Повний список)
+        # ========================================================
         self.entities = {
-            "Military Districts": {
-                "table": "military_districts",
-                "fields": [
-                    {"name": "name", "type": "text", "required": True, "label": "Name"},
-                    {"name": "code", "type": "text", "required": False, "label": "Code"}
-                ],
-                "display_fields": ["id", "name", "code"]
-            },
-            "Armies": {
-                "table": "armies",
-                "fields": [
-                    {"name": "number", "type": "text", "required": True, "label": "Number"},
-                    {"name": "name", "type": "text", "required": False, "label": "Name"},
-                    {"name": "military_district_id", "type": "combo", "required": True, "label": "Military District",
-                     "source": "military_districts"}
-                ],
-                "display_fields": ["id", "number", "name", "military_district_id"]
-            },
-            "Corps": {
-                "table": "corps",
-                "fields": [
-                    {"name": "number", "type": "text", "required": True, "label": "Number"},
-                    {"name": "name", "type": "text", "required": False, "label": "Name"},
-                    {"name": "army_id", "type": "combo", "required": True, "label": "Army", "source": "armies"}
-                ],
-                "display_fields": ["id", "number", "name", "army_id"]
-            },
-            "Divisions": {
-                "table": "divisions",
-                "fields": [
-                    {"name": "number", "type": "text", "required": True, "label": "Number"},
-                    {"name": "name", "type": "text", "required": False, "label": "Name"},
-                    {"name": "corps_id", "type": "combo", "required": True, "label": "Corps", "source": "corps"}
-                ],
-                "display_fields": ["id", "number", "name", "corps_id"]
-            },
-            "Military Units": {
-                "table": "military_units",
-                "fields": [
-                    {"name": "number", "type": "text", "required": True, "label": "Number"},
-                    {"name": "name", "type": "text", "required": True, "label": "Name"},
-                    {"name": "division_id", "type": "combo", "required": True, "label": "Division",
-                     "source": "divisions"},
-                    {"name": "location_id", "type": "combo", "required": False, "label": "Location",
-                     "source": "locations"}
-                ],
-                "display_fields": ["id", "number", "name", "division_id", "location_id"]
-            },
-            "Locations": {
-                "table": "locations",
-                "fields": [
-                    {"name": "name", "type": "text", "required": True, "label": "Name"},
-                    {"name": "address", "type": "text", "required": False, "label": "Address"},
-                    {"name": "region", "type": "text", "required": False, "label": "Region"},
-                    {"name": "coordinates", "type": "text", "required": False, "label": "Coordinates"}
-                ],
-                "display_fields": ["id", "name", "address", "region", "coordinates"]
-            },
-            "Ranks": {
-                "table": "ranks",
-                "fields": [
-                    {"name": "name", "type": "text", "required": True, "label": "Name"},
-                    {"name": "category_id", "type": "combo", "required": True, "label": "Category",
-                     "source": "personnel_categories"}
-                ],
-                "display_fields": ["id", "name", "category_id"]
-            },
-            "Specialties": {
-                "table": "specialties",
-                "fields": [
-                    {"name": "name", "type": "text", "required": True, "label": "Name"},
-                    {"name": "code", "type": "text", "required": True, "label": "Code"}
-                ],
-                "display_fields": ["id", "name", "code"]
-            },
-            "Military Personnel": {
-                "table": "military_personnel",
-                "fields": [
-                    {"name": "last_name", "type": "text", "required": True, "label": "Last Name"},
-                    {"name": "first_name", "type": "text", "required": True, "label": "First Name"},
-                    {"name": "middle_name", "type": "text", "required": False, "label": "Middle Name"},
-                    {"name": "rank_id", "type": "combo", "required": True, "label": "Rank", "source": "ranks"},
-                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Military Unit",
-                     "source": "military_units"},
-                    {"name": "enlistment_date", "type": "date", "required": False, "label": "Enlistment Date"},
-                    {"name": "birth_date", "type": "date", "required": False, "label": "Birth Date"}
-                ],
-                "display_fields": ["id", "last_name", "first_name", "middle_name", "rank_id", "military_unit_id"]
-            },
-            "Equipment Types": {
+            # --- ДОВІДНИКИ (ТЕХНІКА ТА ЗБРОЯ) ---
+            "01. Типи Техніки": {
                 "table": "equipment_types",
                 "fields": [
-                    {"name": "name", "type": "text", "required": True, "label": "Name"},
-                    {"name": "category", "type": "text", "required": False, "label": "Category"}
+                    {"name": "name", "type": "text", "required": True, "label": "Назва"},
+                    {"name": "category", "type": "combo", "required": True, "label": "Категорія",
+                     "options": ["Combat Vehicle", "Transport Vehicle", "Artillery", "Special"]}
                 ],
-                "display_fields": ["id", "name", "category"]
+                "display_fields": ["id", "name", "category"],
+                "headers": ["ID", "Назва", "Категорія"]
             },
-            "Equipment": {
-                "table": "equipment",
-                "fields": [
-                    {"name": "equipment_type_id", "type": "combo", "required": True, "label": "Equipment Type",
-                     "source": "equipment_types"},
-                    {"name": "model", "type": "text", "required": True, "label": "Model"},
-                    {"name": "serial_number", "type": "text", "required": False, "label": "Serial Number"},
-                    {"name": "year_manufactured", "type": "int", "required": False, "label": "Year Manufactured"},
-                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Military Unit",
-                     "source": "military_units"},
-                    {"name": "condition", "type": "text", "required": False, "label": "Condition"}
-                ],
-                "display_fields": ["id", "equipment_type_id", "model", "serial_number", "year_manufactured",
-                                   "military_unit_id"]
-            },
-            "Weapon Types": {
+            "02. Типи Озброєння": {
                 "table": "weapon_types",
                 "fields": [
-                    {"name": "name", "type": "text", "required": True, "label": "Name"},
-                    {"name": "category", "type": "text", "required": False, "label": "Category"}
+                    {"name": "name", "type": "text", "required": True, "label": "Назва"},
+                    {"name": "category", "type": "combo", "required": True, "label": "Категорія",
+                     "options": ["Small Arms", "Artillery", "Rocket Systems", "Anti-Tank"]}
                 ],
-                "display_fields": ["id", "name", "category"]
+                "display_fields": ["id", "name", "category"],
+                "headers": ["ID", "Назва", "Категорія"]
             },
-            "Weapons": {
+            "03. Спеціальності": {
+                "table": "specialties",
+                "fields": [
+                    {"name": "name", "type": "text", "required": True, "label": "Назва"},
+                    {"name": "code", "type": "text", "required": True, "label": "Код"}
+                ],
+                "display_fields": ["id", "name", "code"],
+                "headers": ["ID", "Назва", "Код"]
+            },
+            # --- ОСНОВНА СТРУКТУРА ---
+            "04. Військові Округи": {
+                "table": "military_districts",
+                "fields": [
+                    {"name": "name", "type": "text", "required": True, "label": "Назва округу"},
+                    {"name": "code", "type": "text", "required": False, "label": "Код"}
+                ],
+                "display_fields": ["id", "name", "code"],
+                "headers": ["ID", "Назва", "Код"]
+            },
+            "05. Армії": {
+                "table": "armies",
+                "fields": [
+                    {"name": "number", "type": "text", "required": True, "label": "Номер"},
+                    {"name": "name", "type": "text", "required": False, "label": "Назва"},
+                    {"name": "military_district_id", "type": "combo", "required": True, "label": "Округ",
+                     "source": "military_districts", "source_display": "name"}
+                ],
+                "display_fields": ["id", "number", "name", "military_district_id"],
+                "headers": ["ID", "Номер", "Назва", "ID Округу"]
+            },
+            "06. Корпуси": {
+                "table": "corps",
+                "fields": [
+                    {"name": "number", "type": "text", "required": True, "label": "Номер"},
+                    {"name": "name", "type": "text", "required": False, "label": "Назва"},
+                    {"name": "army_id", "type": "combo", "required": True, "label": "Армія",
+                     "source": "armies", "source_display": "number"}
+                ],
+                "display_fields": ["id", "number", "name", "army_id"],
+                "headers": ["ID", "Номер", "Назва", "ID Армії"]
+            },
+            "07. Дивізії": {
+                "table": "divisions",
+                "fields": [
+                    {"name": "number", "type": "text", "required": True, "label": "Номер"},
+                    {"name": "name", "type": "text", "required": False, "label": "Назва"},
+                    {"name": "corps_id", "type": "combo", "required": True, "label": "Корпус",
+                     "source": "corps", "source_display": "number"}
+                ],
+                "display_fields": ["id", "number", "name", "corps_id"],
+                "headers": ["ID", "Номер", "Назва", "ID Корпусу"]
+            },
+            "08. Бригади": {
+                "table": "brigades",
+                "fields": [
+                    {"name": "number", "type": "text", "required": True, "label": "Номер"},
+                    {"name": "name", "type": "text", "required": False, "label": "Назва"},
+                    {"name": "corps_id", "type": "combo", "required": True, "label": "Корпус",
+                     "source": "corps", "source_display": "number"}
+                ],
+                "display_fields": ["id", "number", "name", "corps_id"],
+                "headers": ["ID", "Номер", "Назва", "ID Корпусу"]
+            },
+            "09. Локації": {
+                "table": "locations",
+                "fields": [
+                    {"name": "name", "type": "text", "required": True, "label": "Назва"},
+                    {"name": "address", "type": "text", "required": False, "label": "Адреса"},
+                    {"name": "region", "type": "text", "required": False, "label": "Регіон"}
+                ],
+                "display_fields": ["id", "name", "address", "region"],
+                "headers": ["ID", "Назва", "Адреса", "Регіон"]
+            },
+            "10. Військові Частини": {
+                "table": "military_units",
+                "fields": [
+                    {"name": "number", "type": "text", "required": True, "label": "Номер в/ч"},
+                    {"name": "name", "type": "text", "required": True, "label": "Назва"},
+                    {"name": "division_id", "type": "combo", "required": False, "label": "Дивізія",
+                     "source": "divisions", "source_display": "number"},
+                    {"name": "brigade_id", "type": "combo", "required": False, "label": "Бригада",
+                     "source": "brigades", "source_display": "number"},
+                    {"name": "location_id", "type": "combo", "required": False, "label": "Дислокація",
+                     "source": "locations", "source_display": "name"},
+                    {"name": "commander_id", "type": "combo", "required": False, "label": "Командир",
+                     "source": "military_personnel", "source_display": "last_name"}
+                ],
+                "display_fields": ["id", "number", "name", "division_id", "brigade_id", "location_id", "commander_id"],
+                "headers": ["ID", "Номер в/ч", "Назва", "ID Дивізії", "ID Бригади", "ID Локації", "ID Командира"]
+            },
+            "11. Військовослужбовці": {
+                "table": "military_personnel",
+                "fields": [
+                    {"name": "last_name", "type": "text", "required": True, "label": "Прізвище"},
+                    {"name": "first_name", "type": "text", "required": True, "label": "Ім'я"},
+                    {"name": "middle_name", "type": "text", "required": False, "label": "По батькові"},
+                    {"name": "rank_id", "type": "combo", "required": True, "label": "Звання",
+                     "source": "ranks", "source_display": "name"},
+                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Частина",
+                     "source": "military_units", "source_display": "number"},
+                    {"name": "enlistment_date", "type": "date", "required": False, "label": "Дата прийняття"},
+                    {"name": "birth_date", "type": "date", "required": False, "label": "Дата народження"}
+                ],
+                "display_fields": ["id", "last_name", "first_name", "rank_id", "military_unit_id"],
+                "headers": ["ID", "Прізвище", "Ім'я", "ID Звання", "ID Частини"]
+            },
+            "12. Техніка (Одиниці)": {
+                "table": "equipment",
+                "fields": [
+                    {"name": "model", "type": "text", "required": True, "label": "Модель"},
+                    {"name": "serial_number", "type": "text", "required": False, "label": "Серійний номер"},
+                    {"name": "year_manufactured", "type": "int", "required": False, "label": "Рік випуску"},
+                    {"name": "equipment_type_id", "type": "combo", "required": True, "label": "Тип",
+                     "source": "equipment_types", "source_display": "name"},
+                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Частина",
+                     "source": "military_units", "source_display": "number"}
+                ],
+                "display_fields": ["id", "model", "serial_number", "year_manufactured", "equipment_type_id",
+                                   "military_unit_id"],
+                "headers": ["ID", "Модель", "Серійний №", "Рік", "ID Типу", "ID Частини"]
+            },
+            "13. Озброєння (Одиниці)": {
                 "table": "weapons",
                 "fields": [
-                    {"name": "weapon_type_id", "type": "combo", "required": True, "label": "Weapon Type",
-                     "source": "weapon_types"},
-                    {"name": "model", "type": "text", "required": True, "label": "Model"},
-                    {"name": "serial_number", "type": "text", "required": False, "label": "Serial Number"},
-                    {"name": "caliber", "type": "text", "required": False, "label": "Caliber"},
-                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Military Unit",
-                     "source": "military_units"}
+                    {"name": "model", "type": "text", "required": True, "label": "Модель"},
+                    {"name": "serial_number", "type": "text", "required": False, "label": "Номер"},
+                    {"name": "caliber", "type": "text", "required": False, "label": "Калібр"},
+                    {"name": "weapon_type_id", "type": "combo", "required": True, "label": "Тип",
+                     "source": "weapon_types", "source_display": "name"},
+                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Частина",
+                     "source": "military_units", "source_display": "number"}
                 ],
-                "display_fields": ["id", "weapon_type_id", "model", "serial_number", "caliber", "military_unit_id"]
-            },
-            "Facilities": {
-                "table": "facilities",
-                "fields": [
-                    {"name": "name", "type": "text", "required": True, "label": "Name"},
-                    {"name": "type", "type": "text", "required": True, "label": "Type"},
-                    {"name": "address", "type": "text", "required": False, "label": "Address"},
-                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Military Unit",
-                     "source": "military_units"},
-                    {"name": "location_id", "type": "combo", "required": False, "label": "Location",
-                     "source": "locations"}
-                ],
-                "display_fields": ["id", "name", "type", "address", "military_unit_id", "location_id"]
+                "display_fields": ["id", "model", "serial_number", "caliber", "weapon_type_id", "military_unit_id"],
+                "headers": ["ID", "Модель", "Номер", "Калібр", "ID Типу", "ID Частини"]
             }
         }
 
-        # Populate entity combo
         self.entity_combo['values'] = list(self.entities.keys())
-        if self.entities:
-            self.entity_combo.current(0)
-            self._on_entity_select(None)
 
     def _on_entity_select(self, event):
         entity_name = self.entity_var.get()
-        if not entity_name:
-            return
-
+        if not entity_name: return
         entity_config = self.entities[entity_name]
 
-        # Clear content frame
-        for widget in self.content_frame.winfo_children():
-            widget.destroy()
-
-        # Create CRUD interface for selected entity
+        for widget in self.content_frame.winfo_children(): widget.destroy()
         self._create_crud_interface(entity_config)
 
     def _create_crud_interface(self, config: Dict[str, Any]):
@@ -199,78 +206,63 @@ class CRUDFrame(tk.Frame):
         toolbar = ttk.Frame(self.content_frame)
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 10))
 
-        ttk.Button(toolbar, text="Add", command=lambda: self._add_record(config)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Edit", command=lambda: self._edit_record(config)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Delete", command=lambda: self._delete_record(config)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Refresh", command=lambda: self._refresh_table(config)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="➕ Додати", command=lambda: self._add_record(config)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="✏️ Редагувати", command=lambda: self._edit_record(config)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="🗑️ Видалити", command=lambda: self._delete_record(config)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="🔄 Оновити", command=lambda: self._refresh_table(config)).pack(side=tk.LEFT, padx=2)
 
-        # Search frame
+        # Search
         search_frame = ttk.Frame(self.content_frame)
         search_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
-
-        ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT)
+        ttk.Label(search_frame, text="Пошук:").pack(side=tk.LEFT)
         self.search_var = tk.StringVar()
         search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
         search_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         search_entry.bind('<KeyRelease>', lambda e: self._search_records(config))
 
-        # Table frame
+        # Table
         table_frame = ttk.Frame(self.content_frame)
         table_frame.grid(row=2, column=0, sticky="nsew")
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
 
-        # Create treeview
         self.tree = ttk.Treeview(table_frame, show="headings")
         self.tree.grid(row=0, column=0, sticky="nsew")
 
-        # Scrollbars
         v_scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
         v_scrollbar.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=v_scrollbar.set)
-
         h_scrollbar = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
         h_scrollbar.grid(row=1, column=0, sticky="ew")
         self.tree.configure(xscrollcommand=h_scrollbar.set)
 
-        # Configure grid weights
-        self.content_frame.rowconfigure(2, weight=1)
-
-        # Load data
         self._refresh_table(config)
 
     def _refresh_table(self, config: Dict[str, Any]):
-        """Refresh the table with current data"""
         table_name = config["table"]
         display_fields = config["display_fields"]
+        headers = config.get("headers", display_fields)
 
-        # Build query
         fields_str = ", ".join(display_fields)
         query = f'SELECT {fields_str} FROM {table_name} ORDER BY id'
 
         try:
             cols, rows = self.db.query_with_columns(query)
+            for item in self.tree.get_children(): self.tree.delete(item)
 
-            # Clear existing data
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-
-            # Configure columns
-            self.tree["columns"] = cols
-            for col in cols:
-                self.tree.heading(col, text=col.replace("_", " ").title())
+            self.tree["columns"] = display_fields
+            for col, header in zip(display_fields, headers):
+                self.tree.heading(col, text=header)
                 self.tree.column(col, width=120, anchor=tk.W)
 
-            # Insert data
             for row in rows:
-                values = [row.get(col) for col in cols]
+                values = [row.get(col) for col in display_fields]
                 self.tree.insert("", tk.END, values=values)
 
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load data: {str(e)}")
+            messagebox.showerror("Помилка", f"Не вдалося завантажити дані: {str(e)}")
 
     def _search_records(self, config: Dict[str, Any]):
-        """Search records based on search term"""
         search_term = self.search_var.get().strip()
         if not search_term:
             self._refresh_table(config)
@@ -279,165 +271,103 @@ class CRUDFrame(tk.Frame):
         table_name = config["table"]
         display_fields = config["display_fields"]
 
-        # Build search query
-        search_conditions = []
-        for field in display_fields:
-            if field != "id":
-                search_conditions.append(f'{field}::text ILIKE %s')
-
-        if not search_conditions:
-            return
+        search_conditions = [f'{field}::text ILIKE %s' for field in display_fields if field != "id"]
+        if not search_conditions: return
 
         fields_str = ", ".join(display_fields)
         where_clause = " OR ".join(search_conditions)
         query = f'SELECT {fields_str} FROM {table_name} WHERE {where_clause} ORDER BY id'
-
         search_params = [f'%{search_term}%'] * len(search_conditions)
 
         try:
             cols, rows = self.db.query_with_columns(query, search_params)
+            for item in self.tree.get_children(): self.tree.delete(item)
 
-            # Clear existing data
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-
-            # Configure columns
-            self.tree["columns"] = cols
-            for col in cols:
-                self.tree.heading(col, text=col.replace("_", " ").title())
-                self.tree.column(col, width=120, anchor=tk.W)
-
-            # Insert data
             for row in rows:
-                values = [row.get(col) for col in cols]
+                values = [row.get(col) for col in display_fields]
                 self.tree.insert("", tk.END, values=values)
-
         except Exception as e:
-            messagebox.showerror("Error", f"Search error: {str(e)}")
+            messagebox.showerror("Помилка", f"Помилка пошуку: {str(e)}")
 
-    def _add_record(self, config: Dict[str, Any]):
-        """Add new record"""
-        self._show_record_dialog(config, "Add Record")
+    def _add_record(self, config):
+        self._show_record_dialog(config, "Додати запис")
 
-    def _edit_record(self, config: Dict[str, Any]):
-        """Edit selected record"""
+    def _edit_record(self, config):
         selection = self.tree.selection()
         if not selection:
-            messagebox.showwarning("Warning", "Select a record to edit")
+            messagebox.showwarning("Увага", "Оберіть запис для редагування")
             return
 
-        item = self.tree.item(selection[0])
-        record_id = item['values'][0]
-
-        # Load record data
+        record_id = self.tree.item(selection[0])['values'][0]
         table_name = config["table"]
-        query = f'SELECT * FROM {table_name} WHERE id = %s'
 
         try:
-            rows = self.db.query(query, [record_id])
-            if not rows:
-                messagebox.showerror("Error", "Record not found")
-                return
-
-            record_data = dict(rows[0])
-            self._show_record_dialog(config, "Edit Record", record_data)
-
+            rows = self.db.query(f'SELECT * FROM {table_name} WHERE id = %s', [record_id])
+            if rows: self._show_record_dialog(config, "Редагувати запис", dict(rows[0]))
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load record: {str(e)}")
+            messagebox.showerror("Помилка", f"Не вдалося завантажити запис: {str(e)}")
 
-    def _delete_record(self, config: Dict[str, Any]):
-        """Delete selected record"""
+    def _delete_record(self, config):
         selection = self.tree.selection()
         if not selection:
-            messagebox.showwarning("Warning", "Select a record to delete")
+            messagebox.showwarning("Увага", "Оберіть запис для видалення")
             return
 
-        if not messagebox.askyesno("Confirm", "Are you sure you want to delete this record?"):
-            return
+        if not messagebox.askyesno("Підтвердження", "Ви впевнені?"): return
 
-        item = self.tree.item(selection[0])
-        record_id = item['values'][0]
-
-        table_name = config["table"]
-        query = f'DELETE FROM {table_name} WHERE id = %s'
-
+        record_id = self.tree.item(selection[0])['values'][0]
         try:
-            affected_rows = self.db.execute(query, [record_id])
-            if affected_rows > 0:
-                messagebox.showinfo("Success", "Record deleted successfully")
-                self._refresh_table(config)
-            else:
-                messagebox.showerror("Error", "Record was not deleted")
-
+            self.db.execute(f'DELETE FROM {config["table"]} WHERE id = %s', [record_id])
+            self._refresh_table(config)
+            messagebox.showinfo("Успіх", "Запис видалено")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to delete record: {str(e)}")
+            messagebox.showerror("Помилка", f"Не вдалося видалити (можливо, є пов'язані дані): {str(e)}")
 
     def _show_record_dialog(self, config: Dict[str, Any], title: str, record_data: Optional[Dict] = None):
-        """Show dialog for adding/editing record"""
         dialog = tk.Toplevel(self)
         dialog.title(title)
-        dialog.geometry("500x600")
-        dialog.transient(self)
-        dialog.grab_set()
+        dialog.geometry("550x650")
 
-        # Center dialog
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
-
-        # Create form
         canvas = tk.Canvas(dialog)
         scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=canvas.yview)
         form_frame = ttk.Frame(canvas, padding=20)
 
         canvas.configure(yscrollcommand=scrollbar.set)
-
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.create_window((0, 0), window=form_frame, anchor="nw")
 
-        canvas_frame = canvas.create_window((0, 0), window=form_frame, anchor="nw")
+        form_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
-        def on_frame_configure(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-
-        form_frame.bind("<Configure>", on_frame_configure)
-
-        # Store form widgets
         widgets = {}
 
-        # Create form fields
         for i, field in enumerate(config["fields"]):
             field_name = field["name"]
             field_type = field["type"]
             required = field.get("required", False)
-            label = field.get("label", field_name.replace("_", " ").title())
+            label = field.get("label", field_name)
+            if required: label += " *"
 
-            # Label
-            label_text = label
-            if required:
-                label_text += " *"
-            ttk.Label(form_frame, text=label_text).grid(row=i, column=0, sticky="w", pady=5)
+            ttk.Label(form_frame, text=label).grid(row=i, column=0, sticky="w", pady=5)
 
-            # Input widget
-            if field_type == "text":
-                widget = ttk.Entry(form_frame, width=40)
-            elif field_type == "int":
+            if field_type == "text" or field_type == "int":
                 widget = ttk.Entry(form_frame, width=40)
             elif field_type == "date":
                 widget = DateEntry(form_frame, date_pattern="yyyy-mm-dd", width=37)
             elif field_type == "combo":
                 if "source" in field:
-                    source_table = field["source"]
+                    # ВАЖЛИВО: Визначаємо, яку колонку показувати (source_display)
+                    display_col = field.get("source_display", "name")
                     try:
-                        # Get name field from source table
-                        name_field = "name" if source_table != "personnel_categories" else "name"
-                        source_data = self.db.query(
-                            f'SELECT id, {name_field} FROM {source_table} ORDER BY {name_field}')
-                        values = [f"{row['id']}: {row[name_field]}" for row in source_data]
-                    except Exception as e:
+                        query = f'SELECT id, {display_col} FROM {field["source"]} ORDER BY {display_col}'
+                        source_data = self.db.query(query)
+                        # Формат списку: "ID: Значення"
+                        values = [f"{row['id']}: {row[display_col]}" for row in source_data]
+
+                        if not required: values.insert(0, "")
+
+                    except:
                         values = []
-                        print(f"Error loading source data: {e}")
                     widget = ttk.Combobox(form_frame, values=values, state="readonly", width=37)
                 elif "options" in field:
                     widget = ttk.Combobox(form_frame, values=field["options"], state="readonly", width=37)
@@ -449,83 +379,61 @@ class CRUDFrame(tk.Frame):
             widget.grid(row=i, column=1, sticky="ew", pady=5, padx=(10, 0))
             widgets[field_name] = widget
 
-            # Set initial value if editing
+            # Заповнення при редагуванні
             if record_data and field_name in record_data:
-                value = record_data[field_name]
-                if value is not None:
+                val = record_data[field_name]
+                if val is not None:
                     if field_type == "combo" and "source" in field:
                         try:
-                            source_table = field["source"]
-                            name_field = "name"
-                            source_data = self.db.query(f'SELECT id, {name_field} FROM {source_table} WHERE id = %s',
-                                                        [value])
-                            if source_data:
-                                widget.set(f"{value}: {source_data[0][name_field]}")
+                            display_col = field.get("source_display", "name")
+                            res = self.db.query(f'SELECT {display_col} FROM {field["source"]} WHERE id = %s', [val])
+                            if res: widget.set(f"{val}: {res[0][display_col]}")
                         except:
                             pass
+                    elif field_type == "date":
+                        widget.set_date(val)
                     else:
-                        if field_type == "date":
-                            widget.set_date(value)
-                        else:
-                            widget.insert(0, str(value))
+                        widget.insert(0, str(val))
 
-        # Configure grid weights
-        form_frame.columnconfigure(1, weight=1)
-
-        # Buttons
-        button_frame = ttk.Frame(dialog)
-        button_frame.pack(fill=tk.X, padx=20, pady=10, side=tk.BOTTOM)
-
-        def save_record():
+        def save():
             try:
                 data = {}
                 for field in config["fields"]:
-                    field_name = field["name"]
-                    field_type = field["type"]
-                    widget = widgets[field_name]
+                    fname = field["name"]
+                    ftype = field["type"]
+                    w = widgets[fname]
+                    val = w.get().strip() if hasattr(w, 'get') else None
 
-                    value = widget.get().strip() if hasattr(widget, 'get') else None
-
-                    if field.get("required", False) and not value:
-                        messagebox.showerror("Error", f"Field '{field.get('label', field_name)}' is required")
+                    if field.get("required") and not val:
+                        messagebox.showerror("Помилка", f"Поле '{field['label']}' обов'язкове")
                         return
 
-                    if field_type == "int":
-                        data[field_name] = int(value) if value else None
-                    elif field_type == "combo" and "source" in field:
-                        if value:
-                            try:
-                                data[field_name] = int(value.split(":")[0])
-                            except (ValueError, IndexError):
-                                messagebox.showerror("Error", f"Invalid format for field '{field_name}'")
-                                return
+                    if ftype == "int":
+                        data[fname] = int(val) if val else None
+                    elif ftype == "combo" and "source" in field:
+                        if val:
+                            data[fname] = int(val.split(":")[0])
                         else:
-                            data[field_name] = None
+                            data[fname] = None
                     else:
-                        data[field_name] = value if value else None
+                        data[fname] = val if val else None
 
-                table_name = config["table"]
                 if record_data:
-                    set_clause = ", ".join([f'{k} = %s' for k in data.keys()])
-                    query = f'UPDATE {table_name} SET {set_clause} WHERE id = %s'
-                    params = list(data.values()) + [record_data["id"]]
+                    set_cl = ", ".join([f'{k}=%s' for k in data])
+                    self.db.execute(f'UPDATE {config["table"]} SET {set_cl} WHERE id=%s',
+                                    list(data.values()) + [record_data["id"]])
                 else:
-                    fields = ", ".join(data.keys())
-                    placeholders = ", ".join(["%s"] * len(data))
-                    query = f'INSERT INTO {table_name} ({fields}) VALUES ({placeholders})'
-                    params = list(data.values())
+                    cols = ", ".join(data.keys())
+                    phs = ", ".join(["%s"] * len(data))
+                    self.db.execute(f'INSERT INTO {config["table"]} ({cols}) VALUES ({phs})', list(data.values()))
 
-                affected_rows = self.db.execute(query, params)
-
-                if affected_rows > 0:
-                    messagebox.showinfo("Success", "Record saved successfully")
-                    dialog.destroy()
-                    self._refresh_table(config)
-                else:
-                    messagebox.showerror("Error", "Record was not saved")
-
+                messagebox.showinfo("Успіх", "Збережено")
+                dialog.destroy()
+                self._refresh_table(config)
             except Exception as e:
-                messagebox.showerror("Error", f"Save error: {str(e)}")
+                messagebox.showerror("Помилка", f"Помилка при збереженні:\n{str(e)}")
 
-        ttk.Button(button_frame, text="Save", command=save_record).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(side=tk.BOTTOM, pady=10)
+        ttk.Button(btn_frame, text="💾 Зберегти", command=save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="❌ Скасувати", command=dialog.destroy).pack(side=tk.LEFT, padx=5)

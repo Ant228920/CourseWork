@@ -141,7 +141,7 @@ class MainFrame(tk.Frame):
                 messagebox.showwarning("Помилка", "Пароль надто короткий!")
                 return
             try:
-                from app.auth import AuthService
+                # from app.auth import AuthService
                 AuthService(self.db).change_password(current_login, new_p)
                 messagebox.showinfo("Успіх", "Ваш пароль змінено!")
                 entry_new_pass.delete(0, tk.END)
@@ -225,7 +225,7 @@ class MainFrame(tk.Frame):
             if not sel: return
             rid = tree_res.item(sel[0])['values'][0]
             try:
-                from app.auth import AuthService
+                # from app.auth import AuthService
                 AuthService(self.db).admin_process_request(rid, action)
                 refresh_res()
                 msg = "Дозволено зміну" if action == 'approve' else "Відхилено"

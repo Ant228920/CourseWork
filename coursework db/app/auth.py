@@ -15,8 +15,8 @@ class AuthService:
         except Exception:
             return False
 
-    # --- АВТОРИЗАЦІЯ ---
     def get_key_by_login(self, login: str) -> Optional[Dict]:
+        # Отримуємо дані тільки з таблиці ключів
         sql = """
               SELECT k.id, k.login, k.password, k.role_id, r.name AS role, k.user_id
               FROM keys k
@@ -30,133 +30,107 @@ class AuthService:
         return self.db.query('SELECT login, password FROM keys')
 
     def create_user(self, login: str, password: str, role_name: str, email: Optional[str] = None) -> int:
+        # 1. Знаходимо роль
         role = self.db.query('SELECT id FROM roles WHERE name=%s', [role_name])
-        if not role:
-            raise ValueError("Role not found")
+        if not role: raise ValueError(f"Role '{role_name}' not found")
         role_id = role[0][0]
 
+        # 2. Створюємо профіль в users (тільки email і статус)
+        user_sql = 'INSERT INTO users (email, confirmed) VALUES (%s, %s) RETURNING id'
+        user_id = self.db.query(user_sql, [email, True])[0][0]
+
+        # 3. Створюємо ключі в keys (логін, пароль, роль)
         pwd = self.hash_password(password)
-
-        user_sql = 'INSERT INTO users (email, confirmed, role_id, login, password) VALUES (%s, %s, %s, %s, %s) RETURNING id'
-        user_id = self.db.query(user_sql, [email, True, role_id, login, pwd])[0][0]
-
         keys_sql = 'INSERT INTO keys (login, password, role_id, user_id) VALUES (%s, %s, %s, %s)'
         self.db.execute(keys_sql, [login, pwd, role_id, user_id])
+
         return user_id
 
     def register_with_request(self, login: str, password: str, target_role: str, email: Optional[str] = None):
-        """Спеціальна реєстрація для Оператора: створює як Guest + запит на підвищення"""
-        # 1. Спочатку створюємо як 'Guest'
-        guest_role_id = self.db.query("SELECT id FROM roles WHERE name='Guest'")[0][0]
-        pwd = self.hash_password(password)
+        # Створення Гостя (через метод create_user)
+        user_id = self.create_user(login, password, "Guest", email)
 
-        user_sql = 'INSERT INTO users (email, confirmed, role_id, login, password) VALUES (%s, %s, %s, %s, %s) RETURNING id'
-        user_id = self.db.query(user_sql, [email, True, guest_role_id, login, pwd])[0][0]
-
-        self.db.execute(
-            'INSERT INTO keys (login, password, role_id, user_id) VALUES (%s, %s, %s, %s)',
-            [login, pwd, guest_role_id, user_id]
-        )
-
-        # 2. Створюємо запит на роль Оператора
-        req_type = 'role_operator'  # Тільки для оператора
+        # Створення запиту
+        req_type = 'role_operator' if target_role == 'Operator' else 'role_authorized'
         self.create_request(user_id, login, req_type)
 
     def login(self, login: str, password: str) -> Optional[Dict]:
-        key_data = self.get_key_by_login(login)
-        if not key_data: return None
+        key = self.get_key_by_login(login)
+        if not key: return None
 
-        user_data = self.db.query('SELECT confirmed, email FROM users WHERE id=%s', [key_data['user_id']])
+        # Перевірка пароля
+        if not self.verify(password, key['password']): return None
+
+        # Перевірка статусу в таблиці users
+        user_data = self.db.query('SELECT confirmed, email FROM users WHERE id=%s', [key['user_id']])
         if not user_data or not user_data[0]['confirmed']: return None
 
-        if not self.verify(password, key_data['password']): return None
-
-        session_user = key_data.copy()
-        session_user['role'] = key_data['role']
-        session_user['email'] = user_data[0]['email']
-        return session_user
+        session = key.copy()
+        session['email'] = user_data[0]['email']
+        return session
 
     def login_as_guest(self) -> Optional[Dict]:
-        """Знаходить або створює користувача guest для швидкого входу"""
-        # Спробуємо знайти існуючого гостя
         guest = self.get_key_by_login('guest')
-
         if not guest:
-            # Якщо немає - створимо його автоматично
-            try:
-                self.create_user('guest', 'guest', 'Guest', 'guest@system.local')
-                guest = self.get_key_by_login('guest')
-            except Exception as e:
-                print(f"Guest creation error: {e}")
-                return None
+            # Автоматично створюємо системного гостя, якщо немає
+            self.create_user('guest', 'guest', 'Guest', 'guest@system')
+            guest = self.get_key_by_login('guest')
 
-        # Повертаємо дані гостя (без перевірки пароля)
-        session_user = guest.copy()
-        session_user['role'] = 'Guest'
-        session_user['email'] = 'guest@system.local'
-        return session_user
+        # Перевіряємо чи існує профіль
+        user_data = self.db.query('SELECT email FROM users WHERE id=%s', [guest['user_id']])
 
-    def change_password(self, login: str, new_password: str):
-        hashed = self.hash_password(new_password)
-        self.db.execute("UPDATE keys SET password=%s WHERE login=%s", [hashed, login])
-        self.db.execute("UPDATE users SET password=%s WHERE login=%s", [hashed, login])
+        session = guest.copy()
+        session['email'] = user_data[0]['email'] if user_data else ''
+        return session
 
-    # --- ЗАПИТИ (Requests) ---
+    def change_password(self, login: str, new_pass: str):
+        h = self.hash_password(new_pass)
+        self.db.execute("UPDATE keys SET password=%s WHERE login=%s", [h, login])
 
-    def create_request(self, user_id: Optional[int], login: str, req_type: str) -> str:
-        existing = self.db.query(
-            "SELECT id FROM requests WHERE login=%s AND request_type=%s AND status='pending'",
-            [login, req_type]
-        )
-        if existing:
-            return "Заявка вже існує."
-
-        self.db.execute(
-            "INSERT INTO requests (user_id, login, request_type, status) VALUES (%s, %s, %s, 'pending')",
-            [user_id, login, req_type]
-        )
+    # --- REQUESTS ---
+    def create_request(self, uid, login, rtype):
+        exists = self.db.query("SELECT id FROM requests WHERE login=%s AND request_type=%s AND status='pending'",
+                               [login, rtype])
+        if exists: return "Заявка вже існує."
+        self.db.execute("INSERT INTO requests (user_id, login, request_type, status) VALUES (%s, %s, %s, 'pending')",
+                        [uid, login, rtype])
         return "Заявку створено."
 
     def create_password_reset_request(self, login: str) -> str:
-        if not self.get_key_by_login(login): return "Користувача не знайдено."
-        return self.create_request(None, login, 'password_reset')
+        key = self.get_key_by_login(login)
+        if not key: return "Користувача не знайдено."
+        return self.create_request(key['user_id'], login, 'password_reset')
 
     def check_reset_status_simple(self, login: str) -> str:
-        # Перевіряємо статус (для пароля або для ролі - залежить від контексту, тут для пароля)
-        # Але краще зробити універсально, якщо ви використовуєте це для ролей теж.
-        # Для простоти повертаємо статус останнього запиту будь-якого типу або конкретно пароля
-        rows = self.db.query("SELECT status FROM requests WHERE login=%s ORDER BY created_at DESC LIMIT 1", [login])
-        return rows[0]['status'] if rows else "not_found"
+        row = self.db.query(
+            "SELECT status FROM requests WHERE login=%s AND request_type='password_reset' ORDER BY created_at DESC LIMIT 1",
+            [login])
+        return row[0]['status'] if row else "not_found"
 
     def resubmit_request(self, login: str):
-        self.create_request(None, login, 'password_reset')  # Спрощено
+        self.create_password_reset_request(login)
 
-    def admin_approve_request(self, request_id: int):
-        self.admin_process_request(request_id, 'approve')
+    def admin_approve_request(self, req_id: int):
+        self.admin_process_request(req_id, 'approve')
 
-    def admin_reject_request(self, request_id: int):
-        self.admin_process_request(request_id, 'reject')
+    def admin_reject_request(self, req_id: int):
+        self.admin_process_request(req_id, 'reject')
 
     def admin_process_request(self, req_id: int, action: str):
         req = self.db.query("SELECT * FROM requests WHERE id=%s", [req_id])[0]
-        login, rtype = req['login'], req['request_type']
-        new_status = 'approved' if action == 'approve' else 'rejected'
+        status = 'approved' if action == 'approve' else 'rejected'
 
-        if new_status == 'approved':
-            if rtype == 'role_operator':
-                # Підвищуємо до Оператора
-                op_role = self.db.query("SELECT id FROM roles WHERE name='Operator'")[0][0]
-                self.db.execute("UPDATE keys SET role_id=%s WHERE login=%s", [op_role, login])
-                self.db.execute("UPDATE users SET role_id=%s WHERE login=%s", [op_role, login])
-                new_status = 'completed'
+        if status == 'approved' and req['request_type'].startswith('role_'):
+            new_role_name = 'Operator' if req['request_type'] == 'role_operator' else 'Authorized'
+            rid = self.db.query("SELECT id FROM roles WHERE name=%s", [new_role_name])[0][0]
 
-        self.db.execute("UPDATE requests SET status=%s, processed_at=NOW() WHERE id=%s", [new_status, req_id])
+            # Оновлюємо роль тільки в таблиці ключів!
+            self.db.execute("UPDATE keys SET role_id=%s WHERE login=%s", [rid, req['login']])
+            status = 'completed'
 
-    def user_finalize_reset(self, login: str, new_password: str):
-        # Метод для зміни пароля юзером після схвалення (використовує check_reset_status_simple)
-        # ... (код аналогічний попередньому, але звертається до requests)
-        # Для стислості:
-        hashed = self.hash_password(new_password)
-        self.db.execute("UPDATE keys SET password=%s WHERE login=%s", [hashed, login])
-        self.db.execute("UPDATE users SET password=%s WHERE login=%s", [hashed, login])
+        self.db.execute("UPDATE requests SET status=%s, processed_at=NOW() WHERE id=%s", [status, req_id])
+
+    def user_finalize_reset(self, login: str, new_pass: str):
+        if self.check_reset_status_simple(login) != 'approved': raise ValueError("Немає дозволу")
+        self.change_password(login, new_pass)
         self.db.execute("DELETE FROM requests WHERE login=%s AND request_type='password_reset'", [login])
