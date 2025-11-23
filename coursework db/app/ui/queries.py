@@ -4,242 +4,264 @@ import csv
 from tkcalendar import DateEntry
 
 # ===================================================================
-# ГРУПОВАНА СТРУКТУРА ЗАПИТІВ
+# ГРУПОВАНА СТРУКТУРА ЗАПИТІВ (З РОЗУМНИМИ ПАРАМЕТРАМИ)
 # ===================================================================
 
 QUERY_GROUPS = {
-    "Офіцерський склад": [
+    "1. Офіцерський склад": [
         {
             "name": "Загальний список",
             "sql": """
-                   SELECT mp.last_name, mp.first_name, r.name as rank, mu.name as unit
+                   SELECT mp.last_name || ' ' || mp.first_name AS "Офіцер",
+                          r.name                               AS "Звання",
+                          mu.name                              AS "Частина"
                    FROM military_personnel mp
                             JOIN ranks r ON mp.rank_id = r.id
                             JOIN military_units mu ON mp.military_unit_id = mu.id
                    WHERE r.category_id = 1;
-                   """
+                   """,
+            "params": []
         },
         {
             "name": "Пошук за званням",
             "sql": """
-                   SELECT mp.last_name, mp.first_name, r.name as rank, mu.name as unit
+                   SELECT mp.last_name, mp.first_name, mu.name as "Частина"
                    FROM military_personnel mp
                             JOIN ranks r ON mp.rank_id = r.id
                             JOIN military_units mu ON mp.military_unit_id = mu.id
                    WHERE r.category_id = 1
-                     AND r.name = %(rank_name)s;
+                     AND r.id = %(rank_id)s;
                    """,
-            "params": ["RANK_NAME:str"]
+            # "source" вказує таблицю, "display" - що показувати людям
+            "params": [{"name": "rank_id", "label": "Звання", "type": "db_combo",
+                        "table": "ranks", "display": "name", "condition": "category_id=1"}]
         }
     ],
-    "Рядовий та сержантський склад": [
+    "2. Рядовий та сержантський склад": [
         {
             "name": "Загальний список",
             "sql": """
-                   SELECT mp.last_name, mp.first_name, r.name as rank, mu.name as unit
+                   SELECT mp.last_name, mp.first_name, r.name as "Звання", mu.name as "Частина"
                    FROM military_personnel mp
                             JOIN ranks r ON mp.rank_id = r.id
                             JOIN military_units mu ON mp.military_unit_id = mu.id
-                   WHERE r.category_id = 2;
-                   """
+                   WHERE r.category_id IN (2, 3)
+                   ORDER BY mp.last_name;
+                   """,
+            "params": []
         },
         {
-            "name": "Список конкретної частини",
+            "name": "У конкретній частині",
             "sql": """
-                   SELECT mp.last_name, mp.first_name, r.name as rank
+                   SELECT mp.last_name, mp.first_name, r.name as "Звання"
                    FROM military_personnel mp
                             JOIN ranks r ON mp.rank_id = r.id
-                   WHERE r.category_id = 2
+                   WHERE r.category_id IN (2, 3)
                      AND mp.military_unit_id = %(unit_id)s;
                    """,
-            "params": ["UNIT_ID:int"]
+            "params": [{"name": "unit_id", "label": "Військова частина", "type": "db_combo",
+                        "table": "military_units", "display": "name"}]
         }
     ],
-    "Військова техніка": [
+    "3. Військова техніка": [
         {
-            "name": "Наявність загалом",
+            "name": "Наявність техніки (Всього)",
             "sql": """
-                   SELECT v.name as vehicle, vc.name as category, mu.name as unit, v.serial_number
-                   FROM vehicles v
-                            JOIN vehicle_categories vc ON v.category_id = vc.id
-                            JOIN military_units mu ON v.military_unit_id = mu.id;
-                   """
+                   SELECT et.name AS "Тип", et.category AS "Категорія", COUNT(e.id) AS "Кількість", mu.name AS "Частина"
+                   FROM equipment e
+                            JOIN equipment_types et ON e.equipment_type_id = et.id
+                            JOIN military_units mu ON e.military_unit_id = mu.id
+                   GROUP BY et.name, et.category, mu.name
+                   ORDER BY mu.name;
+                   """,
+            "params": []
         },
         {
-            "name": "Певної категорії в Армії",
+            "name": "Техніка в Армії (за категорією)",
             "sql": """
-                   SELECT v.name, v.serial_number, mu.name as unit_name
-                   FROM vehicles v
-                            JOIN vehicle_categories vc ON v.category_id = vc.id
-                            JOIN military_units mu ON v.military_unit_id = mu.id
-                            JOIN divisions d ON mu.division_id = d.id
-                            JOIN corps c ON d.corps_id = c.id
-                   WHERE vc.name = %(category_name)s
-                     AND c.army_id = %(army_id)s;
+                   SELECT e.model, e.serial_number, mu.name as "Частина"
+                   FROM equipment e
+                            JOIN equipment_types et ON e.equipment_type_id = et.id
+                            JOIN military_units mu ON e.military_unit_id = mu.id
+                            LEFT JOIN divisions d ON mu.division_id = d.id
+                            LEFT JOIN brigades b ON mu.brigade_id = b.id
+                            LEFT JOIN corps c ON c.id = COALESCE(d.corps_id, b.corps_id)
+                            LEFT JOIN armies a ON a.id = c.army_id
+                   WHERE et.category = %(cat_name)s
+                     AND a.id = %(army_id)s;
                    """,
-            "params": ["CATEGORY_NAME:str", "ARMY_ID:int"]
+            "params": [
+                {"name": "cat_name", "label": "Категорія", "type": "manual_combo",
+                 "values": ["Combat Vehicle", "Transport Vehicle"]},
+                {"name": "army_id", "label": "Армія", "type": "db_combo",
+                 "table": "armies", "display": "name"}
+            ]
         }
     ],
-    "Озброєння": [
+    "4. Озброєння": [
         {
-            "name": "Всього в окрузі",
+            "name": "Звіт по озброєнню (Округ)",
             "sql": """
-                   SELECT w.name as weapon, wc.name as type, mu.name as unit, w.quantity
+                   SELECT wt.name AS "Зброя", COUNT(w.id) AS "Кількість", md.name AS "Округ"
                    FROM weapons w
-                            JOIN weapon_categories wc ON w.category_id = wc.id
-                            JOIN military_units mu ON w.military_unit_id = mu.id;
-                   """
+                            JOIN weapon_types wt ON w.weapon_type_id = wt.id
+                            JOIN military_units mu ON w.military_unit_id = mu.id
+                            LEFT JOIN divisions d ON mu.division_id = d.id
+                            LEFT JOIN brigades b ON mu.brigade_id = b.id
+                            LEFT JOIN corps c ON c.id = COALESCE(d.corps_id, b.corps_id)
+                            LEFT JOIN armies a ON a.id = c.army_id
+                            LEFT JOIN military_districts md ON md.id = a.military_district_id
+                   GROUP BY wt.name, md.name;
+                   """,
+            "params": []
         },
         {
-            "name": "Категорії у вказаній частині",
+            "name": "Озброєння частини",
             "sql": """
-                   SELECT w.name, w.quantity, wc.name as category
+                   SELECT w.model, w.serial_number, w.caliber
                    FROM weapons w
-                            JOIN weapon_categories wc ON w.category_id = wc.id
-                   WHERE w.military_unit_id = %(unit_id)s
-                     AND wc.name = %(cat_name)s;
+                   WHERE w.military_unit_id = %(unit_id)s;
                    """,
-            "params": ["UNIT_ID:int", "CAT_NAME:str"]
+            "params": [{"name": "unit_id", "label": "Частина", "type": "db_combo",
+                        "table": "military_units", "display": "name"}]
         }
     ],
-    "Статистика частин": [
+    "5. Статистика": [
         {
             "name": "Армія з найбільшою к-стю частин",
             "sql": """
-                   SELECT a.name as army_name, COUNT(mu.id) as units_count
+                   SELECT a.name, COUNT(mu.id)
                    FROM armies a
                             JOIN corps c ON c.army_id = a.id
-                            JOIN divisions d ON d.corps_id = c.id
-                            JOIN military_units mu ON mu.division_id = d.id
+                            LEFT JOIN divisions d ON d.corps_id = c.id
+                            LEFT JOIN brigades b ON b.corps_id = c.id
+                            LEFT JOIN military_units mu ON (mu.division_id = d.id OR mu.brigade_id = b.id)
                    GROUP BY a.id, a.name
-                   ORDER BY units_count DESC LIMIT 1;
-                   """
-        },
-        {
-            "name": "Дивізія з найменшою к-стю частин",
-            "sql": """
-                   SELECT d.name as div_name, COUNT(mu.id) as units_count
-                   FROM divisions d
-                            LEFT JOIN military_units mu ON mu.division_id = d.id
-                   GROUP BY d.id, d.name
-                   ORDER BY units_count ASC LIMIT 1;
-                   """
+                   ORDER BY 2 DESC LIMIT 1;
+                   """,
+            "params": []
         }
     ],
-    "Керівний склад": [
+    "6. Керівний склад": [
         {
-            "name": "Частини та командири (вказаної дивізії)",
+            "name": "Командири частин (в Армії)",
             "sql": """
-                   SELECT mu.name      as unit,
-                          mp.last_name as commander_surname,
-                          r.name       as commander_rank
+                   SELECT mu.name AS "Частина", mp.last_name AS "Командир", r.name AS "Звання"
                    FROM military_units mu
                             JOIN military_personnel mp ON mu.commander_id = mp.id
                             JOIN ranks r ON mp.rank_id = r.id
-                   WHERE mu.division_id = %(div_id)s;
+                            LEFT JOIN divisions d ON mu.division_id = d.id
+                            LEFT JOIN brigades b ON mu.brigade_id = b.id
+                            LEFT JOIN corps c ON c.id = COALESCE(d.corps_id, b.corps_id)
+                            LEFT JOIN armies a ON a.id = c.army_id
+                   WHERE a.id = %(army_id)s;
                    """,
-            "params": ["DIV_ID:int"]
+            "params": [{"name": "army_id", "label": "Армія", "type": "db_combo",
+                        "table": "armies", "display": "name"}]
         }
     ],
-    "Інфраструктура та Дислокація": [
+    "7. Дислокація": [
         {
-            "name": "Дислокація всіх частин",
+            "name": "Локації частин округу",
             "sql": """
-                   SELECT mu.name as unit, loc.address, loc.city
+                   SELECT mu.name, loc.address
                    FROM military_units mu
-                            JOIN locations loc ON mu.location_id = loc.id;
-                   """
-        },
-        {
-            "name": "Споруди з >1 підрозділом",
-            "sql": """
-                   SELECT b.name as building, b.address, COUNT(u.id) as units_inside
-                   FROM buildings b
-                            JOIN military_units u ON u.building_id = b.id
-                   GROUP BY b.id, b.name
-                   HAVING COUNT(u.id) > 1;
-                   """
+                            JOIN locations loc ON mu.location_id = loc.id
+                            LEFT JOIN divisions d ON mu.division_id = d.id
+                            LEFT JOIN brigades b ON mu.brigade_id = b.id
+                            LEFT JOIN corps c ON c.id = COALESCE(d.corps_id, b.corps_id)
+                            LEFT JOIN armies a ON a.id = c.army_id
+                            LEFT JOIN military_districts md ON md.id = a.military_district_id
+                   WHERE md.id = %(dist_id)s;
+                   """,
+            "params": [{"name": "dist_id", "label": "Округ", "type": "db_combo",
+                        "table": "military_districts", "display": "name"}]
         }
     ],
-    "Спеціальні запити": [
+    "8. Пошук за кількістю": [
         {
-            "name": "Частини за кількістю техніки",
+            "name": "Частини з > N одиниць техніки (тип)",
             "sql": """
-                   SELECT mu.name as unit, COUNT(v.id) as amount
+                   SELECT mu.name, COUNT(e.id)
                    FROM military_units mu
-                            JOIN vehicles v ON v.military_unit_id = mu.id
-                            JOIN vehicle_categories vc ON v.category_id = vc.id
-                   WHERE vc.name = %(veh_type)s
+                            JOIN equipment e ON e.military_unit_id = mu.id
+                            JOIN equipment_types et ON e.equipment_type_id = et.id
+                   WHERE et.id = %(type_id)s
                    GROUP BY mu.id, mu.name
-                   HAVING COUNT(v.id) = %(amount)s;
+                   HAVING COUNT(e.id) >= %(min_count)s;
                    """,
-            "params": ["VEH_TYPE:str", "AMOUNT:int"]
-        },
+            "params": [
+                {"name": "type_id", "label": "Тип техніки", "type": "db_combo",
+                 "table": "equipment_types", "display": "name"},
+                {"name": "min_count", "label": "Мін. кількість", "type": "int"}
+            ]
+        }
+    ],
+    "9. Спеціальності": [
         {
-            "name": "Частини БЕЗ вказаного озброєння",
+            "name": "Військові спец. у підрозділі",
             "sql": """
-                   SELECT mu.name
-                   FROM military_units mu
-                   WHERE mu.id NOT IN (SELECT w.military_unit_id
-                                       FROM weapons w
-                                                JOIN weapon_categories wc ON w.category_id = wc.id
-                                       WHERE wc.name = %(weapon_type)s);
-                   """,
-            "params": ["WEAPON_TYPE:str"]
-        },
-        {
-            "name": "Військові певної спеціальності",
-            "sql": """
-                   SELECT mp.last_name, mp.first_name, s.name as specialty
+                   SELECT mp.last_name, s.name AS "Спец."
                    FROM military_personnel mp
                             JOIN personnel_specialties ps ON mp.id = ps.personnel_id
                             JOIN specialties s ON ps.specialty_id = s.id
-                   WHERE s.name = %(spec_name)s
+                   WHERE s.id = %(spec_id)s
                      AND mp.military_unit_id = %(unit_id)s;
                    """,
-            "params": ["SPEC_NAME:str", "UNIT_ID:int"]
+            "params": [
+                {"name": "spec_id", "label": "Спеціальність", "type": "db_combo",
+                 "table": "specialties", "display": "name"},
+                {"name": "unit_id", "label": "Частина", "type": "db_combo",
+                 "table": "military_units", "display": "name"}
+            ]
+        }
+    ],
+    "10. Інфраструктура": [
+        {
+            "name": "Споруди частини",
+            "sql": "SELECT name, type, address FROM facilities WHERE military_unit_id = %(unit_id)s;",
+            "params": [{"name": "unit_id", "label": "Частина", "type": "db_combo",
+                        "table": "military_units", "display": "name"}]
         }
     ]
 }
 
 
 # ========================================
-# QUERIES FRAME
+# QUERIES FRAME (Логіка інтерфейсу)
 # ========================================
 
 class QueriesFrame(tk.Frame):
     def __init__(self, master, db):
         super().__init__(master)
         self.db = db
-        self.current_query_config = None  # Тут зберігаємо поточний вибраний конфіг
+        self.current_query_config = None
+        self._param_widgets = []  # Список активних віджетів параметрів
 
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(3, weight=1)  # Таблиця розтягується
+        self.rowconfigure(3, weight=1)
 
         # --- БЛОК ВИБОРУ ---
         selection_frame = ttk.LabelFrame(self, text="Вибір запиту", padding=10)
         selection_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
         selection_frame.columnconfigure(1, weight=1)
 
-        # 1. Категорія
         ttk.Label(selection_frame, text="Категорія:").grid(row=0, column=0, sticky="w", padx=5)
         self.cat_combo = ttk.Combobox(selection_frame, state="readonly", values=list(QUERY_GROUPS.keys()))
         self.cat_combo.grid(row=0, column=1, sticky="ew", padx=5, pady=5)
         self.cat_combo.bind("<<ComboboxSelected>>", self._on_category_select)
 
-        # 2. Конкретний запит
         ttk.Label(selection_frame, text="Запит:").grid(row=1, column=0, sticky="w", padx=5)
         self.query_combo = ttk.Combobox(selection_frame, state="readonly")
         self.query_combo.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
         self.query_combo.bind("<<ComboboxSelected>>", self._on_query_select)
 
-        # --- БЛОК ПАРАМЕТРІВ ---
+        # --- ПАРАМЕТРИ ---
         self.params_wrapper = ttk.LabelFrame(self, text="Параметри пошуку", padding=10)
         self.params_wrapper.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
 
         self.params_frame = ttk.Frame(self.params_wrapper)
         self.params_frame.pack(fill=tk.X)
-        self._param_widgets = []
 
         # --- КНОПКИ ---
         btn_frame = ttk.Frame(self)
@@ -247,18 +269,16 @@ class QueriesFrame(tk.Frame):
 
         self.btn_run = ttk.Button(btn_frame, text="▶ Виконати", command=self._run, state=tk.DISABLED)
         self.btn_run.pack(side=tk.LEFT)
-
-        self.btn_export = ttk.Button(btn_frame, text="💾 Експорт (CSV)", command=self._export, state=tk.DISABLED)
+        self.btn_export = ttk.Button(btn_frame, text="💾 Експорт", command=self._export, state=tk.DISABLED)
         self.btn_export.pack(side=tk.RIGHT)
 
-        # --- ТАБЛИЦЯ РЕЗУЛЬТАТІВ ---
+        # --- ТАБЛИЦЯ ---
         tree_frame = ttk.Frame(self)
         tree_frame.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
         self.tree = ttk.Treeview(tree_frame, show="headings")
         sb_y = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
         sb_x = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
-
         self.tree.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
 
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -266,27 +286,21 @@ class QueriesFrame(tk.Frame):
         sb_x.pack(side=tk.BOTTOM, fill=tk.X)
 
     def _on_category_select(self, event):
-        """Коли обрали категорію, оновлюємо список запитів"""
-        category = self.cat_combo.get()
-        queries = QUERY_GROUPS.get(category, [])
-
-        # Оновлюємо другий комбобокс
+        cat = self.cat_combo.get()
+        queries = QUERY_GROUPS.get(cat, [])
         self.query_combo['values'] = [q['name'] for q in queries]
         if queries:
             self.query_combo.current(0)
-            self._on_query_select(None)  # Автоматично вибираємо перший
+            self._on_query_select(None)
         else:
             self.query_combo.set('')
             self._clear_params()
 
     def _on_query_select(self, event):
-        """Коли обрали конкретний запит, будуємо поля для параметрів"""
-        category = self.cat_combo.get()
-        query_name = self.query_combo.get()
-
-        # Шукаємо конфіг у словнику
-        queries = QUERY_GROUPS.get(category, [])
-        self.current_query_config = next((q for q in queries if q['name'] == query_name), None)
+        cat = self.cat_combo.get()
+        q_name = self.query_combo.get()
+        queries = QUERY_GROUPS.get(cat, [])
+        self.current_query_config = next((q for q in queries if q['name'] == q_name), None)
 
         if self.current_query_config:
             self.btn_run.config(state=tk.NORMAL)
@@ -295,7 +309,10 @@ class QueriesFrame(tk.Frame):
             self.btn_run.config(state=tk.DISABLED)
 
     def _clear_params(self):
-        for w in self._param_widgets: w.destroy()
+        # Очищаємо GUI
+        for widget in self.params_frame.winfo_children():
+            widget.destroy()
+        # Очищаємо логічний список
         self._param_widgets.clear()
 
     def _build_params(self, cfg):
@@ -303,106 +320,119 @@ class QueriesFrame(tk.Frame):
         params = cfg.get("params", [])
 
         if not params:
-            lbl = ttk.Label(self.params_frame, text="Цей запит не потребує параметрів", foreground="grey")
-            lbl.pack(anchor="w")
-            self._param_widgets.append(lbl)
+            ttk.Label(self.params_frame, text="Параметри не потрібні", foreground="gray").pack(anchor="w")
             return
 
-        # Будуємо сітку параметрів
-        for i, spec in enumerate(params):
-            name, typ = spec.split(":", 1)
+        for p in params:
+            row = ttk.Frame(self.params_frame)
+            row.pack(fill=tk.X, pady=2)
 
-            row_f = ttk.Frame(self.params_frame)
-            row_f.pack(fill=tk.X, pady=2)
+            lbl_text = p.get("label", p["name"]) + ":"
+            ttk.Label(row, text=lbl_text, width=20).pack(side=tk.LEFT)
 
-            lbl = ttk.Label(row_f, text=f"{name}:", width=20)
-            lbl.pack(side=tk.LEFT)
+            widget = None
 
-            if typ == "date":
-                ent = DateEntry(row_f, date_pattern="yyyy-mm-dd", width=20)
-            else:
-                ent = ttk.Entry(row_f, width=25)
-
-            ent.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-            # Зберігаємо посилання на віджети
-            self._param_widgets.append((name, typ, ent))
-
-    def _collect_params(self):
-        if not self.current_query_config: return None
-
-        params_def = self.current_query_config.get("params", [])
-        if not params_def: return {}  # Порожній словник, якщо параметрів немає
-
-        values = {}
-        # self._param_widgets тепер містить кортежі (name, type, widget)
-        # Або лейбл, якщо параметрів немає (тоді список пустий для циклу нижче)
-
-        real_widgets = [w for w in self._param_widgets if isinstance(w, tuple)]
-
-        for name, typ, widget in real_widgets:
-            val = widget.get()
-            if not val:  # Проста перевірка на пустоту
-                messagebox.showwarning("Увага", f"Заповніть поле '{name}'")
-                return None
-
-            if typ == "int":
+            # 1. Випадаючий список з бази (DB Combo)
+            if p["type"] == "db_combo":
                 try:
-                    val = int(val)
-                except ValueError:
-                    messagebox.showerror("Помилка", f"Параметр '{name}' має бути числом")
-                    return None
+                    table = p["table"]
+                    display = p.get("display", "name")
+                    cond = p.get("condition", "")
+                    where_clause = f"WHERE {cond}" if cond else ""
 
-            values[name.lower()] = val
+                    query = f"SELECT id, {display} FROM {table} {where_clause} ORDER BY {display}"
+                    data = self.db.query(query)
 
-        return values
+                    # Формат: "ID: Name"
+                    values = [f"{r['id']}: {r[display]}" for r in data]
+                    widget = ttk.Combobox(row, values=values, state="readonly", width=30)
+                except Exception as e:
+                    print(f"Error loading combo for {p['name']}: {e}")
+                    widget = ttk.Entry(row)  # Fallback
+
+            # 2. Ручний список (Manual Combo)
+            elif p["type"] == "manual_combo":
+                widget = ttk.Combobox(row, values=p["values"], state="readonly", width=30)
+
+            # 3. Дата
+            elif p["type"] == "date":
+                widget = DateEntry(row, date_pattern="yyyy-mm-dd", width=25)
+
+            # 4. Звичайний текст/число
+            else:
+                widget = ttk.Entry(row, width=30)
+
+            widget.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            # Зберігаємо метадані про параметр разом із віджетом
+            self._param_widgets.append({
+                "meta": p,
+                "widget": widget
+            })
 
     def _run(self):
         if not self.current_query_config: return
 
-        params = self._collect_params()
-        if params is None: return
+        # Збір значень
+        values = {}
+        for item in self._param_widgets:
+            meta = item["meta"]
+            widget = item["widget"]
+            raw_val = widget.get()
+
+            if not raw_val:
+                messagebox.showwarning("Увага", f"Заповніть поле '{meta.get('label', meta['name'])}'")
+                return
+
+            # Обробка значень
+            final_val = raw_val
+
+            if meta["type"] == "int":
+                try:
+                    final_val = int(raw_val)
+                except:
+                    messagebox.showerror("Помилка", "Потрібно ввести число")
+                    return
+
+            elif meta["type"] == "db_combo":
+                # Витягуємо ID з рядка "ID: Name"
+                try:
+                    final_val = int(raw_val.split(":")[0])
+                except:
+                    return
+
+            values[meta["name"]] = final_val
 
         try:
-            # Main DB call
-            cols, rows = self.db.query_with_columns(self.current_query_config["sql"], params)
+            cols, rows = self.db.query_with_columns(self.current_query_config["sql"], values)
 
-            # Clear old rows
             self.tree.delete(*self.tree.get_children())
-
-            # Setup columns
             self.tree["columns"] = cols
             for c in cols:
                 self.tree.heading(c, text=c)
-                self.tree.column(c, width=150, anchor=tk.W)
+                self.tree.column(c, width=150)
 
-            # Insert rows
             for r in rows:
-                # r - це словник, тому беремо значення по ключах колонок
-                values = [r.get(c) for c in cols]
-                self.tree.insert("", tk.END, values=values)
+                vals = [r[c] for c in cols]
+                self.tree.insert("", tk.END, values=vals)
 
             self.btn_export.config(state=tk.NORMAL if rows else tk.DISABLED)
-
         except Exception as e:
-            messagebox.showerror("SQL Error", str(e))
+            messagebox.showerror("SQL Помилка", str(e))
 
     def _export(self):
         items = self.tree.get_children()
-        if not items:
-            messagebox.showwarning("Увага", "Немає даних для експорту")
-            return
+        if not items: return
 
-        filename = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV Files", "*.csv")])
-        if not filename: return
+        fname = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
+        if not fname: return
 
         try:
-            cols = self.tree["columns"]
-            with open(filename, 'w', newline='', encoding='utf-8') as f:
+            with open(fname, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(cols)
-                for item in items:
-                    writer.writerow(self.tree.item(item)['values'])
-            messagebox.showinfo("Успіх", "Звіт збережено!")
+                writer.writerow(self.tree["columns"])
+                for i in items:
+                    writer.writerow(self.tree.item(i)['values'])
+            messagebox.showinfo("Успіх", "Файл збережено!")
         except Exception as e:
             messagebox.showerror("Помилка", str(e))

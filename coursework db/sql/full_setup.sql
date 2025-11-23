@@ -33,10 +33,9 @@ DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
 
 -- =====================================================
--- 2. USER & SECURITY SYSTEM (Correct Architecture)
+-- 2. USER & SECURITY SYSTEM
 -- =====================================================
 
--- Roles
 CREATE TABLE roles (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE
@@ -44,7 +43,6 @@ CREATE TABLE roles (
 
 INSERT INTO roles (name) VALUES ('Guest'), ('Administrator'), ('Operator'), ('Authorized');
 
--- Users (Profile Info Only - NO PASSWORDS HERE)
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255),
@@ -52,7 +50,6 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Keys (Authentication Info)
 CREATE TABLE keys (
     id SERIAL PRIMARY KEY,
     login VARCHAR(100) NOT NULL UNIQUE,
@@ -62,12 +59,11 @@ CREATE TABLE keys (
     UNIQUE(user_id)
 );
 
--- Requests (Unified Registry)
 CREATE TABLE requests (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id) ON DELETE CASCADE,
     login VARCHAR(100) NOT NULL,
-    request_type VARCHAR(50) NOT NULL, -- 'password_reset', 'role_operator'
+    request_type VARCHAR(50) NOT NULL,
     status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     processed_at TIMESTAMP
@@ -126,7 +122,7 @@ CREATE TABLE military_units (
     division_id INT REFERENCES divisions(id) ON DELETE CASCADE,
     brigade_id INT REFERENCES brigades(id) ON DELETE CASCADE,
     location_id INT REFERENCES locations(id),
-    commander_id INT, -- FK added later
+    commander_id INT,
     CONSTRAINT check_division_or_brigade CHECK (
         (division_id IS NOT NULL AND brigade_id IS NULL) OR
         (division_id IS NULL AND brigade_id IS NOT NULL)
@@ -177,7 +173,8 @@ CREATE TABLE ranks (
 );
 
 INSERT INTO ranks (name, category_id, command_level) VALUES
-    ('General', 1, 4), ('Colonel', 1, 4), ('Lieutenant Colonel', 1, 3), ('Major', 1, 3), ('Captain', 1, 2), ('Lieutenant', 1, 2),
+    ('General', 1, 4), ('Colonel', 1, 4), ('Lieutenant Colonel', 1, 3), ('Major', 1, 3),
+    ('Captain', 1, 2), ('Lieutenant', 1, 2),
     ('Master Sergeant', 2, 1), ('Sergeant', 2, 1), ('Warrant Officer', 2, 1),
     ('Corporal', 3, 1), ('Private', 3, 0);
 
@@ -188,7 +185,7 @@ CREATE TABLE specialties (
 );
 
 INSERT INTO specialties (name, code) VALUES
-('Tank Operator', 'T-01'), ('Sniper', 'S-01'), ('Medic', 'M-01');
+('Tank Operator', 'T-01'), ('Sniper', 'S-01'), ('Medic', 'M-01'), ('Engineer', 'E-01');
 
 CREATE TABLE military_personnel (
     id SERIAL PRIMARY KEY,
@@ -207,8 +204,14 @@ CREATE TABLE generals_info (
     academy_name VARCHAR(255)
 );
 
+CREATE TABLE personnel_specialties (
+    personnel_id INT REFERENCES military_personnel(id) ON DELETE CASCADE,
+    specialty_id INT REFERENCES specialties(id) ON DELETE CASCADE,
+    PRIMARY KEY (personnel_id, specialty_id)
+);
+
 -- =====================================================
--- 6. EQUIPMENT & WEAPONS (With Attributes)
+-- 6. EQUIPMENT & WEAPONS
 -- =====================================================
 
 CREATE TABLE equipment_types (
@@ -218,7 +221,7 @@ CREATE TABLE equipment_types (
 );
 
 INSERT INTO equipment_types (name, category) VALUES
-('T-64', 'Combat Vehicle'), ('KamAZ', 'Transport Vehicle');
+('T-64', 'Combat Vehicle'), ('KamAZ', 'Transport Vehicle'), ('BMP-2', 'Combat Vehicle');
 
 CREATE TABLE equipment (
     id SERIAL PRIMARY KEY,
@@ -243,7 +246,7 @@ CREATE TABLE weapon_types (
 );
 
 INSERT INTO weapon_types (name, category) VALUES
-('AK-74', 'Small Arms'), ('D-30', 'Artillery');
+('AK-74', 'Small Arms'), ('D-30', 'Artillery'), ('RPG-7', 'Anti-Tank');
 
 CREATE TABLE weapons (
     id SERIAL PRIMARY KEY,
@@ -288,7 +291,7 @@ ALTER TABLE companies ADD CONSTRAINT fk_company_commander FOREIGN KEY (commander
 ALTER TABLE platoons ADD CONSTRAINT fk_platoon_commander FOREIGN KEY (commander_id) REFERENCES military_personnel(id);
 ALTER TABLE squads ADD CONSTRAINT fk_squad_commander FOREIGN KEY (commander_id) REFERENCES military_personnel(id);
 
--- Trigger for commander rank
+-- Trigger for commander rank validation
 CREATE OR REPLACE FUNCTION check_commander_rank() RETURNS TRIGGER AS $$
 DECLARE
     lvl INT;
@@ -314,20 +317,74 @@ CREATE TRIGGER chk_company_cmd BEFORE INSERT OR UPDATE ON companies FOR EACH ROW
 CREATE TRIGGER chk_unit_cmd BEFORE INSERT OR UPDATE ON military_units FOR EACH ROW EXECUTE FUNCTION check_commander_rank();
 
 -- =====================================================
--- 9. SEED ADMIN USER (Correct Way)
+-- 9. SEED DATA (Test Data)
 -- =====================================================
 
--- 1. Create profile in users (no password here!)
+-- 9.1 Users
 WITH new_admin AS (
-    INSERT INTO users (email, confirmed)
-    VALUES ('admin@military.gov.ua', TRUE)
-    RETURNING id
+    INSERT INTO users (email, confirmed) VALUES ('admin@mil.gov', TRUE) RETURNING id
+), new_oper AS (
+    INSERT INTO users (email, confirmed) VALUES ('oper@mil.gov', TRUE) RETURNING id
+), new_auth AS (
+    INSERT INTO users (email, confirmed) VALUES ('auth@mil.gov', TRUE) RETURNING id
 )
--- 2. Create login info in keys
 INSERT INTO keys (login, password, role_id, user_id)
-SELECT
-    'admin',
-    '$pbkdf2-sha256$29000$ay0l5FxLCWGslRICYOw9Zw$6.2rvfsMII8pxzBc7YobXKcpcdn/7r42ql10Txyj/zo', -- Замініть на реальний хеш, якщо треба
-    (SELECT id FROM roles WHERE name='Administrator'),
-    id
-FROM new_admin;
+SELECT 'admin', '$pbkdf2-sha256$29000$ay0l5FxLCWGslRICYOw9Zw$6.2rvfsMII8pxzBc7YobXKcpcdn/7r42ql10Txyj/zo', (SELECT id FROM roles WHERE name='Administrator'), id FROM new_admin
+UNION ALL
+SELECT 'operator', '$pbkdf2-sha256$29000$ay0l5FxLCWGslRICYOw9Zw$6.2rvfsMII8pxzBc7YobXKcpcdn/7r42ql10Txyj/zo', (SELECT id FROM roles WHERE name='Operator'), id FROM new_oper
+UNION ALL
+SELECT 'user', '$pbkdf2-sha256$29000$ay0l5FxLCWGslRICYOw9Zw$6.2rvfsMII8pxzBc7YobXKcpcdn/7r42ql10Txyj/zo', (SELECT id FROM roles WHERE name='Authorized'), id FROM new_auth;
+
+-- 9.2 Locations
+INSERT INTO locations (name, address, region, coordinates) VALUES
+('Штаб Округу', 'м. Київ, вул. Повітрофлотська, 1', 'Київська обл.', '50.45, 30.52'),
+('Полігон "Десна"', 'смт. Десна', 'Чернігівська обл.', '50.92, 30.75'),
+('Військове містечко Яворів', 'м. Яворів', 'Львівська обл.', '49.94, 23.38');
+
+-- 9.3 Hierarchy
+INSERT INTO military_districts (name, code) VALUES ('Північний ОК', 'N-01');
+
+INSERT INTO armies (number, name, military_district_id) VALUES ('1', '1-ша Танкова Армія', 1);
+INSERT INTO corps (number, name, army_id) VALUES ('8', '8-й Армійський Корпус', 1);
+
+INSERT INTO divisions (number, name, corps_id) VALUES ('72', '72-га Механізована Дивізія', 1);
+INSERT INTO brigades (number, name, corps_id) VALUES ('93', '93-тя ОМБр', 1);
+
+-- 9.4 Units (Without commanders initially)
+INSERT INTO military_units (number, name, division_id, location_id) VALUES
+('A2167', '1-й Механізований Батальйон', 1, 2); -- In Division 72
+
+INSERT INTO military_units (number, name, brigade_id, location_id) VALUES
+('A1302', 'Танковий Батальйон', 1, 3); -- In Brigade 93
+
+-- 9.5 Personnel
+INSERT INTO military_personnel (last_name, first_name, rank_id, military_unit_id, enlistment_date, birth_date) VALUES
+('Коваленко', 'Іван', (SELECT id FROM ranks WHERE name='Colonel'), 1, '2010-05-20', '1980-01-15'), -- Cmdr Unit 1
+('Петренко', 'Петро', (SELECT id FROM ranks WHERE name='Lieutenant Colonel'), 2, '2012-08-10', '1985-03-20'), -- Cmdr Unit 2
+('Сидоренко', 'Олег', (SELECT id FROM ranks WHERE name='Captain'), 1, '2015-01-15', '1990-07-12'), -- Cmdr Company
+('Бойко', 'Андрій', (SELECT id FROM ranks WHERE name='Lieutenant'), 1, '2018-03-01', '1995-11-30'), -- Cmdr Platoon
+('Гончар', 'Микола', (SELECT id FROM ranks WHERE name='Sergeant'), 1, '2019-05-05', '1998-02-14'); -- Cmdr Squad
+
+-- 9.6 Assign Unit Commanders
+UPDATE military_units SET commander_id = 1 WHERE id = 1;
+UPDATE military_units SET commander_id = 2 WHERE id = 2;
+
+-- 9.7 Subunits
+INSERT INTO companies (name, military_unit_id, commander_id) VALUES ('1-ша Рота', 1, 3);
+INSERT INTO platoons (name, company_id, commander_id) VALUES ('1-й Взвод', 1, 4);
+INSERT INTO squads (name, platoon_id, commander_id) VALUES ('1-ше Відділення', 1, 5);
+
+-- 9.8 Equipment & Weapons
+INSERT INTO equipment (equipment_type_id, model, serial_number, year_manufactured, military_unit_id, condition) VALUES
+((SELECT id FROM equipment_types WHERE name='T-64'), 'Т-64БВ', 'TNK001', 1985, 2, 'справна'),
+((SELECT id FROM equipment_types WHERE name='KamAZ'), 'КамАЗ-4310', 'TRK111', 2005, 1, 'справна');
+
+INSERT INTO weapons (weapon_type_id, model, serial_number, caliber, military_unit_id) VALUES
+((SELECT id FROM weapon_types WHERE name='AK-74'), 'АК-74М', 'AK12345', '5.45', 1),
+((SELECT id FROM weapon_types WHERE name='D-30'), 'Д-30', 'ART555', '122mm', 1);
+
+-- 9.9 Infrastructure
+INSERT INTO facilities (name, type, address, military_unit_id, location_id) VALUES
+('Казарма №1', 'Barracks', 'вул. Полкова, 5', 1, 2);
+
+INSERT INTO facility_subunits (facility_id, subunit_id, subunit_type) VALUES (1, 1, 'platoon'); -- 1st platoon in Barracks 1
