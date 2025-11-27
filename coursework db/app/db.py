@@ -17,11 +17,11 @@ class Database:
         if self._conn is None or self._conn.closed:
             try:
                 self._conn = psycopg2.connect(
-                    host=os.getenv("DB_HOST", "localhost"),
-                    port=int(os.getenv("DB_PORT", "5432")),
-                    database=os.getenv("DB_NAME", "military"),
-                    user=os.getenv("DB_USER", "postgres"),
-                    password=os.getenv("DB_PASSWORD", "postgres"),
+                    host=os.getenv("DB_HOST"),
+                    port=int(os.getenv("DB_PORT")),
+                    database=os.getenv("DB_NAME"),
+                    user=os.getenv("DB_USER"),
+                    password=os.getenv("DB_PASSWORD"),
                     cursor_factory=psycopg2.extras.DictCursor
                 )
                 # print(f"✅ Підключено до БД '{os.getenv('DB_NAME')}'")

@@ -236,12 +236,11 @@ class QueriesFrame(tk.Frame):
         super().__init__(master)
         self.db = db
         self.current_query_config = None
-        self._param_widgets = []  # Список активних віджетів параметрів
+        self._param_widgets = []
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(3, weight=1)
 
-        # --- БЛОК ВИБОРУ ---
         selection_frame = ttk.LabelFrame(self, text="Вибір запиту", padding=10)
         selection_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
         selection_frame.columnconfigure(1, weight=1)
@@ -256,14 +255,12 @@ class QueriesFrame(tk.Frame):
         self.query_combo.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
         self.query_combo.bind("<<ComboboxSelected>>", self._on_query_select)
 
-        # --- ПАРАМЕТРИ ---
         self.params_wrapper = ttk.LabelFrame(self, text="Параметри пошуку", padding=10)
         self.params_wrapper.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
 
         self.params_frame = ttk.Frame(self.params_wrapper)
         self.params_frame.pack(fill=tk.X)
 
-        # --- КНОПКИ ---
         btn_frame = ttk.Frame(self)
         btn_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
 
@@ -272,7 +269,6 @@ class QueriesFrame(tk.Frame):
         self.btn_export = ttk.Button(btn_frame, text="💾 Експорт", command=self._export, state=tk.DISABLED)
         self.btn_export.pack(side=tk.RIGHT)
 
-        # --- ТАБЛИЦЯ ---
         tree_frame = ttk.Frame(self)
         tree_frame.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
@@ -309,10 +305,8 @@ class QueriesFrame(tk.Frame):
             self.btn_run.config(state=tk.DISABLED)
 
     def _clear_params(self):
-        # Очищаємо GUI
         for widget in self.params_frame.winfo_children():
             widget.destroy()
-        # Очищаємо логічний список
         self._param_widgets.clear()
 
     def _build_params(self, cfg):
@@ -332,7 +326,6 @@ class QueriesFrame(tk.Frame):
 
             widget = None
 
-            # 1. Випадаючий список з бази (DB Combo)
             if p["type"] == "db_combo":
                 try:
                     table = p["table"]
@@ -343,28 +336,23 @@ class QueriesFrame(tk.Frame):
                     query = f"SELECT id, {display} FROM {table} {where_clause} ORDER BY {display}"
                     data = self.db.query(query)
 
-                    # Формат: "ID: Name"
                     values = [f"{r['id']}: {r[display]}" for r in data]
                     widget = ttk.Combobox(row, values=values, state="readonly", width=30)
                 except Exception as e:
                     print(f"Error loading combo for {p['name']}: {e}")
-                    widget = ttk.Entry(row)  # Fallback
+                    widget = ttk.Entry(row)
 
-            # 2. Ручний список (Manual Combo)
             elif p["type"] == "manual_combo":
                 widget = ttk.Combobox(row, values=p["values"], state="readonly", width=30)
 
-            # 3. Дата
             elif p["type"] == "date":
                 widget = DateEntry(row, date_pattern="yyyy-mm-dd", width=25)
 
-            # 4. Звичайний текст/число
             else:
                 widget = ttk.Entry(row, width=30)
 
             widget.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-            # Зберігаємо метадані про параметр разом із віджетом
             self._param_widgets.append({
                 "meta": p,
                 "widget": widget
@@ -373,7 +361,6 @@ class QueriesFrame(tk.Frame):
     def _run(self):
         if not self.current_query_config: return
 
-        # Збір значень
         values = {}
         for item in self._param_widgets:
             meta = item["meta"]
@@ -384,7 +371,6 @@ class QueriesFrame(tk.Frame):
                 messagebox.showwarning("Увага", f"Заповніть поле '{meta.get('label', meta['name'])}'")
                 return
 
-            # Обробка значень
             final_val = raw_val
 
             if meta["type"] == "int":
@@ -395,7 +381,6 @@ class QueriesFrame(tk.Frame):
                     return
 
             elif meta["type"] == "db_combo":
-                # Витягуємо ID з рядка "ID: Name"
                 try:
                     final_val = int(raw_val.split(":")[0])
                 except:

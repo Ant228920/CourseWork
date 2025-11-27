@@ -2,7 +2,7 @@
 import tkinter as tk
 from tkinter import ttk
 
-from db import Database  # або звідки у тебе імпортується клас Database
+from db import Database
 
 
 # ----------------------------
@@ -37,7 +37,6 @@ def get_corps_children_rows(db: Database, corps_id: int):
     """Повертаємо і divisions, і brigades як діти corps — з різними next_level."""
     result = []
 
-    # divisions (next level -> unit after division)
     divs = db.query("""
         SELECT id, number, name
         FROM divisions
@@ -46,10 +45,8 @@ def get_corps_children_rows(db: Database, corps_id: int):
     """, (corps_id,))
     for r in divs:
         label = f"Дивізія {r['number']} — {r['name'] or ''}".strip(" — ")
-        # Після дивізії йдуть підрозділи (military_units) => next 'unit'
         result.append((r["id"], label, "division"))
 
-    # brigades (next level -> unit after brigade)
     brs = db.query("""
         SELECT id, number, name
         FROM brigades
@@ -58,7 +55,6 @@ def get_corps_children_rows(db: Database, corps_id: int):
     """, (corps_id,))
     for r in brs:
         label = f"Бригада {r['number']} — {r['name'] or ''}".strip(" — ")
-        # Після бригади також йдуть military_units => next 'brigade' (we'll treat brigade nodes as 'brigade' to fetch units)
         result.append((r["id"], label, "brigade"))
 
     return result
@@ -114,20 +110,15 @@ def get_squads_rows(db: Database, platoon_id: int):
     return [(r["id"], f"Відділення: {r['name']}", None) for r in rows]  # None -> листок
 
 
-# ----------------------------
-# MAP: який fetcher викликаємо для якого рівня
-# Зверни увагу: для 'corps' ми використовуємо спеціальний fetcher, що повертає два типи дітей
-# ----------------------------
 LEVEL_FETCHERS = {
     "district": get_armies_rows,
     "army": get_corps_rows,
-    "corps": get_corps_children_rows,   # повертає і division, і brigade вузли
+    "corps": get_corps_children_rows,
     "division": get_units_rows_by_division,
     "brigade": get_units_rows_by_brigade,
     "unit": get_companies_rows,
     "company": get_platoons_rows,
     "platoon": get_squads_rows,
-    # 'squad' -> None (leaf)
 }
 
 
@@ -139,11 +130,9 @@ class HierarchyTree(tk.Frame):
         super().__init__(master)
         self.db = db
 
-        # layout
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
 
-        # Treeview
         self.tree = ttk.Treeview(self, show="tree")
         self.tree.grid(row=0, column=0, sticky="nsew")
 
@@ -151,23 +140,19 @@ class HierarchyTree(tk.Frame):
         vsb.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=vsb.set)
 
-        # bind
         self.tree.bind("<<TreeviewOpen>>", self.on_open)
 
-        # load root nodes
         self.load_root_nodes()
 
     def load_root_nodes(self):
         try:
             rows = get_districts_rows(self.db)
         except Exception as e:
-            # показати повідомлення у UI, але не падати
             self.tree.insert("", "end", text=f"(Помилка при завантаженні округів: {e})")
             return
 
         for id_, label, next_lvl in rows:
             node = self.tree.insert("", "end", text=f"Округ: {label}", values=(id_, "district"), open=False)
-            # якщо є наступний рівень — додати плейсхолдер
             if next_lvl in LEVEL_FETCHERS:
                 self.tree.insert(node, "end", text="loading")
 
@@ -182,19 +167,16 @@ class HierarchyTree(tk.Frame):
         except Exception:
             return
 
-        # отримати дітей, якщо вже завантажені — нічого не робити
         children = self.tree.get_children(node)
         if children and self.tree.item(children[0], "text") != "loading":
             return
 
-        # видаляємо плейсхолдери
         for ch in children:
             self.tree.delete(ch)
 
-        # вибір fetcher-а
         fetcher = LEVEL_FETCHERS.get(level)
         if not fetcher:
-            return  # листок
+            return
 
         try:
             items = fetcher(self.db, item_id)
@@ -203,12 +185,8 @@ class HierarchyTree(tk.Frame):
             return
 
         for child_id, child_label, child_next in items:
-            # вставляємо вузол з правильним рівнем
-            # child_next може бути None (листок)
             self.tree.insert(node, "end", text=child_label, values=(child_id, child_next or ""), open=False)
-            # додати loading якщо далі є fetcher
             if child_next and child_next in LEVEL_FETCHERS:
-                # беремо останній створений дочірній елемент
                 new_children = self.tree.get_children(node)
                 if new_children:
                     last = new_children[-1]

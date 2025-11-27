@@ -1,20 +1,21 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkcalendar import DateEntry
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
+from datetime import datetime, date
+
 
 class CRUDFrame(tk.Frame):
     def __init__(self, master, db):
         super().__init__(master)
         self.db = db
 
-        # Змінна для зберігання поточного фільтру підрозділів (рота/взвод/відділення)
         self.current_subunit_type = tk.StringVar(value="company")
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
 
-        # --- ВЕРХНЯ ПАНЕЛЬ (Вибір таблиці) ---
+        # --- ВЕРХНЯ ПАНЕЛЬ ---
         top_panel = ttk.Frame(self, padding=(10, 15))
         top_panel.grid(row=0, column=0, sticky="ew")
 
@@ -26,17 +27,15 @@ class CRUDFrame(tk.Frame):
         self.entity_combo.pack(side=tk.LEFT)
         self.entity_combo.bind("<<ComboboxSelected>>", self._on_entity_select)
 
-        # --- ОСНОВНА ОБЛАСТЬ ---
         self.content_frame = ttk.Frame(self, padding=10)
         self.content_frame.grid(row=1, column=0, sticky="nsew")
         self.content_frame.columnconfigure(0, weight=1)
         self.content_frame.rowconfigure(2, weight=1)
 
         # ========================================================
-        # КОНФІГУРАЦІЯ ТАБЛИЦЬ
+        # КОНФІГУРАЦІЯ ТАБЛИЦЬ (З JOINS)
         # ========================================================
         self.entities = {
-            # ... (Інші таблиці без змін) ...
             "01. Типи Техніки": {
                 "table": "equipment_types",
                 "fields": [
@@ -66,7 +65,6 @@ class CRUDFrame(tk.Frame):
                 "display_fields": ["id", "name", "code"],
                 "headers": ["ID", "Назва", "Код"]
             },
-            # --- ОСНОВНА СТРУКТУРА ---
             "04. Військові Округи": {
                 "table": "military_districts",
                 "fields": [
@@ -84,8 +82,14 @@ class CRUDFrame(tk.Frame):
                     {"name": "military_district_id", "type": "combo", "required": True, "label": "Округ",
                      "source": "military_districts", "source_display": "name"}
                 ],
-                "display_fields": ["id", "number", "name", "military_district_id"],
-                "headers": ["ID", "Номер", "Назва", "ID Округу"]
+                "display_fields": ["id", "number", "name", "district_name"],
+                "headers": ["ID", "Номер", "Назва", "Округ"],
+                "custom_sql": """
+                              SELECT a.id, a.number, a.name, md.name as district_name
+                              FROM armies a
+                                       LEFT JOIN military_districts md ON a.military_district_id = md.id
+                              ORDER BY a.number
+                              """
             },
             "06. Корпуси": {
                 "table": "corps",
@@ -95,8 +99,14 @@ class CRUDFrame(tk.Frame):
                     {"name": "army_id", "type": "combo", "required": True, "label": "Армія",
                      "source": "armies", "source_display": "name"}
                 ],
-                "display_fields": ["id", "number", "name", "army_id"],
-                "headers": ["ID", "Номер", "Назва", "ID Армії"]
+                "display_fields": ["id", "number", "name", "army_name"],
+                "headers": ["ID", "Номер", "Назва", "Армія"],
+                "custom_sql": """
+                              SELECT c.id, c.number, c.name, a.name as army_name
+                              FROM corps c
+                                       LEFT JOIN armies a ON c.army_id = a.id
+                              ORDER BY c.number
+                              """
             },
             "07. Дивізії": {
                 "table": "divisions",
@@ -106,8 +116,14 @@ class CRUDFrame(tk.Frame):
                     {"name": "corps_id", "type": "combo", "required": True, "label": "Корпус",
                      "source": "corps", "source_display": "name"}
                 ],
-                "display_fields": ["id", "number", "name", "corps_id"],
-                "headers": ["ID", "Номер", "Назва", "ID Корпусу"]
+                "display_fields": ["id", "number", "name", "corps_name"],
+                "headers": ["ID", "Номер", "Назва", "Корпус"],
+                "custom_sql": """
+                              SELECT d.id, d.number, d.name, c.name as corps_name
+                              FROM divisions d
+                                       LEFT JOIN corps c ON d.corps_id = c.id
+                              ORDER BY d.number
+                              """
             },
             "08. Бригади": {
                 "table": "brigades",
@@ -117,8 +133,14 @@ class CRUDFrame(tk.Frame):
                     {"name": "corps_id", "type": "combo", "required": True, "label": "Корпус",
                      "source": "corps", "source_display": "name"}
                 ],
-                "display_fields": ["id", "number", "name", "corps_id"],
-                "headers": ["ID", "Номер", "Назва", "ID Корпусу"]
+                "display_fields": ["id", "number", "name", "corps_name"],
+                "headers": ["ID", "Номер", "Назва", "Корпус"],
+                "custom_sql": """
+                              SELECT b.id, b.number, b.name, c.name as corps_name
+                              FROM brigades b
+                                       LEFT JOIN corps c ON b.corps_id = c.id
+                              ORDER BY b.number
+                              """
             },
             "09. Локації": {
                 "table": "locations",
@@ -126,7 +148,7 @@ class CRUDFrame(tk.Frame):
                     {"name": "name", "type": "text", "required": True, "label": "Назва"},
                     {"name": "address", "type": "text", "required": False, "label": "Адреса"},
                     {"name": "region", "type": "text", "required": False, "label": "Регіон"},
-                    {"name": "coordinates", "type": "text", "required": False, "label": "Координати (50.45, 30.52)"}
+                    {"name": "coordinates", "type": "text", "required": False, "label": "Координати"}
                 ],
                 "display_fields": ["id", "name", "address", "region", "coordinates"],
                 "headers": ["ID", "Назва", "Адреса", "Регіон", "Координати"]
@@ -143,69 +165,63 @@ class CRUDFrame(tk.Frame):
                     {"name": "location_id", "type": "combo", "required": False, "label": "Дислокація",
                      "source": "locations", "source_display": "name"},
                     {"name": "commander_id", "type": "combo", "required": False, "label": "Командир",
-                     # 1. КОМАНДИР ЧАСТИНИ: Рівень 3+ (Майор, Полковник, Генерал)
-                     "custom_query": """
-                        SELECT 
-                            mp.id, 
-                            mp.last_name || ' ' || mp.first_name || ' (' || r.name || ')' as d_val 
-                        FROM military_personnel mp
-                        JOIN ranks r ON mp.rank_id = r.id
-                        WHERE r.command_level >= 3 
-                        ORDER BY mp.last_name
-                     """
-                    }
+                     "custom_query": "SELECT mp.id, mp.last_name || ' ' || mp.first_name || ' (' || r.name || ')' as d_val FROM military_personnel mp JOIN ranks r ON mp.rank_id = r.id WHERE r.command_level >= 3 ORDER BY mp.last_name"}
                 ],
-                "display_fields": ["id", "number", "name", "division_id", "brigade_id", "location_id", "commander_id"],
-                "headers": ["ID", "Номер в/ч", "Назва", "ID Дивізії", "ID Бригади", "ID Локації", "ID Командира"]
+                "display_fields": ["id", "number", "name", "parent_unit", "location_name", "commander_name"],
+                "headers": ["ID", "Номер в/ч", "Назва", "Підпорядкування", "Дислокація", "Командир"],
+                "custom_sql": """
+                              SELECT mu.id,
+                                     mu.number,
+                                     mu.name,
+                                     COALESCE('Див. ' || d.number, 'Бриг. ' || b.number) as parent_unit,
+                                     l.name                                              as location_name,
+                                     mp.last_name || ' ' || LEFT (mp.first_name, 1) || '.' as commander_name
+                              FROM military_units mu
+                                  LEFT JOIN divisions d
+                              ON mu.division_id = d.id
+                                  LEFT JOIN brigades b ON mu.brigade_id = b.id
+                                  LEFT JOIN locations l ON mu.location_id = l.id
+                                  LEFT JOIN military_personnel mp ON mu.commander_id = mp.id
+                              ORDER BY mu.number
+                              """
             },
             "11. Військовослужбовці": {
                 "table": "military_personnel",
                 "fields": [
                     {"name": "last_name", "type": "text", "required": True, "label": "Прізвище"},
                     {"name": "first_name", "type": "text", "required": True, "label": "Ім'я"},
+                    {"name": "middle_name", "type": "text", "required": False, "label": "По батькові"},  # 🔥 ДОДАНО
                     {"name": "rank_id", "type": "combo", "required": True, "label": "Звання",
                      "source": "ranks", "source_display": "name"},
-
-                    # Поля для редагування (залишаються як були)
-                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Частина (Головна)",
+                    {"name": "military_unit_id", "type": "combo", "required": True, "label": "Частина",
                      "source": "military_units", "source_display": "number"},
-                    {"name": "company_id", "type": "combo", "required": False, "label": "Рота",
-                     "source": "companies", "source_display": "name"},
-                    {"name": "platoon_id", "type": "combo", "required": False, "label": "Взвод",
-                     "source": "platoons", "source_display": "name"},
-                    {"name": "squad_id", "type": "combo", "required": False, "label": "Відділення",
-                     "source": "squads", "source_display": "name"},
-
+                    {"name": "company_id", "type": "combo", "required": False, "label": "Рота", "source": "companies",
+                     "source_display": "name"},
+                    {"name": "platoon_id", "type": "combo", "required": False, "label": "Взвод", "source": "platoons",
+                     "source_display": "name"},
+                    {"name": "squad_id", "type": "combo", "required": False, "label": "Відділення", "source": "squads",
+                     "source_display": "name"},
                     {"name": "enlistment_date", "type": "date", "required": False, "label": "Дата прийняття"},
                     {"name": "birth_date", "type": "date", "required": False, "label": "Дата народження"}
                 ],
-
-                # 🔥 ТЕПЕР ТУТ ГАРНІ НАЗВИ ПОЛІВ (віртуальні)
-                "display_fields": ["id", "last_name", "first_name", "rank_name", "full_location"],
-                "headers": ["ID", "Прізвище", "Ім'я", "Звання", "Місце служби"],
-
-                # 🔥 А ОСЬ МАГІЯ SQL 🔥
+                # 🔥 Додано middle_name у display_fields
+                "display_fields": ["id", "last_name", "first_name", "middle_name", "rank_name", "full_location"],
+                "headers": ["ID", "Прізвище", "Ім'я", "По батькові", "Звання", "Місце служби"],
                 "custom_sql": """
-                    SELECT 
-                        mp.id, 
-                        mp.last_name, 
-                        mp.first_name, 
-                        r.name as rank_name,
-                        -- Ця функція склеює частини, пропускаючи пусті (NULL)
-                        CONCAT_WS(' / ', 
-                            mu.number, 
-                            c.name, 
-                            p.name, 
-                            s.name
-                        ) as full_location
-                    FROM military_personnel mp
-                    JOIN ranks r ON mp.rank_id = r.id
-                    JOIN military_units mu ON mp.military_unit_id = mu.id
-                    LEFT JOIN companies c ON mp.company_id = c.id
-                    LEFT JOIN platoons p ON mp.platoon_id = p.id
-                    LEFT JOIN squads s ON mp.squad_id = s.id
-                    ORDER BY mp.id
-                """
+                              SELECT mp.id,
+                                     mp.last_name,
+                                     mp.first_name,
+                                     mp.middle_name, -- 🔥 ДОДАНО
+                                     r.name                                              as rank_name,
+                                     CONCAT_WS(' / ', mu.number, c.name, p.name, s.name) as full_location
+                              FROM military_personnel mp
+                                       JOIN ranks r ON mp.rank_id = r.id
+                                       JOIN military_units mu ON mp.military_unit_id = mu.id
+                                       LEFT JOIN companies c ON mp.company_id = c.id
+                                       LEFT JOIN platoons p ON mp.platoon_id = p.id
+                                       LEFT JOIN squads s ON mp.squad_id = s.id
+                              ORDER BY mp.id
+                              """
             },
             "12. Техніка": {
                 "table": "equipment",
@@ -218,9 +234,15 @@ class CRUDFrame(tk.Frame):
                     {"name": "military_unit_id", "type": "combo", "required": True, "label": "Частина",
                      "source": "military_units", "source_display": "number"}
                 ],
-                "display_fields": ["id", "model", "serial_number", "year_manufactured", "equipment_type_id",
-                                   "military_unit_id"],
-                "headers": ["ID", "Модель", "Серійний №", "Рік", "ID Типу", "ID Частини"]
+                "display_fields": ["id", "model", "serial_number", "type_name", "unit_num"],
+                "headers": ["ID", "Модель", "Серійний №", "Тип", "В/Ч"],
+                "custom_sql": """
+                              SELECT e.id, e.model, e.serial_number, et.name as type_name, mu.number as unit_num
+                              FROM equipment e
+                                       JOIN equipment_types et ON e.equipment_type_id = et.id
+                                       JOIN military_units mu ON e.military_unit_id = mu.id
+                              ORDER BY e.model
+                              """
             },
             "13. Озброєння": {
                 "table": "weapons",
@@ -233,8 +255,20 @@ class CRUDFrame(tk.Frame):
                     {"name": "military_unit_id", "type": "combo", "required": True, "label": "Частина",
                      "source": "military_units", "source_display": "number"}
                 ],
-                "display_fields": ["id", "model", "serial_number", "caliber", "weapon_type_id", "military_unit_id"],
-                "headers": ["ID", "Модель", "Номер", "Калібр", "ID Типу", "ID Частини"]
+                "display_fields": ["id", "model", "serial_number", "caliber", "type_name", "unit_num"],
+                "headers": ["ID", "Модель", "Номер", "Калібр", "Тип", "В/Ч"],
+                "custom_sql": """
+                              SELECT w.id,
+                                     w.model,
+                                     w.serial_number,
+                                     w.caliber,
+                                     wt.name   as type_name,
+                                     mu.number as unit_num
+                              FROM weapons w
+                                       JOIN weapon_types wt ON w.weapon_type_id = wt.id
+                                       JOIN military_units mu ON w.military_unit_id = mu.id
+                              ORDER BY w.model
+                              """
             },
             "14. Споруди": {
                 "table": "facilities",
@@ -247,8 +281,15 @@ class CRUDFrame(tk.Frame):
                     {"name": "location_id", "type": "combo", "required": False, "label": "Локація",
                      "source": "locations", "source_display": "name"}
                 ],
-                "display_fields": ["id", "name", "type", "military_unit_id"],
-                "headers": ["ID", "Назва", "Тип", "ID Частини"]
+                "display_fields": ["id", "name", "type", "unit_num", "loc_name"],
+                "headers": ["ID", "Назва", "Тип", "Частина", "Локація"],
+                "custom_sql": """
+                              SELECT f.id, f.name, f.type, mu.number as unit_num, l.name as loc_name
+                              FROM facilities f
+                                       JOIN military_units mu ON f.military_unit_id = mu.id
+                                       LEFT JOIN locations l ON f.location_id = l.id
+                              ORDER BY f.name
+                              """
             },
             "15. ТТХ Зброї": {
                 "table": "weapon_attributes",
@@ -258,8 +299,13 @@ class CRUDFrame(tk.Frame):
                      "source": "weapons", "source_display": "model"},
                     {"name": "max_range_km", "type": "text", "required": True, "label": "Дальність (км)"}
                 ],
-                "display_fields": ["id", "weapon_id", "max_range_km"],
-                "headers": ["ID", "Зброя", "Макс. дальність"]
+                "display_fields": ["id", "weapon_model", "max_range_km"],
+                "headers": ["ID", "Модель зброї", "Макс. дальність"],
+                "custom_sql": """
+                              SELECT wa.id, w.model as weapon_model, wa.max_range_km
+                              FROM weapon_attributes wa
+                                       JOIN weapons w ON wa.weapon_id = w.id
+                              """
             },
             "16. ТТХ Техніки": {
                 "table": "vehicle_attributes",
@@ -270,8 +316,13 @@ class CRUDFrame(tk.Frame):
                     {"name": "max_speed_kmh", "type": "int", "required": False, "label": "Швидкість (км/г)"},
                     {"name": "armor_thickness_mm", "type": "int", "required": False, "label": "Броня (мм)"}
                 ],
-                "display_fields": ["id", "equipment_id", "max_speed_kmh", "armor_thickness_mm"],
-                "headers": ["ID", "Техніка", "Швидкість", "Броня"]
+                "display_fields": ["id", "eq_model", "max_speed_kmh", "armor_thickness_mm"],
+                "headers": ["ID", "Модель техніки", "Швидкість", "Броня"],
+                "custom_sql": """
+                              SELECT va.id, e.model as eq_model, va.max_speed_kmh, va.armor_thickness_mm
+                              FROM vehicle_attributes va
+                                       JOIN equipment e ON va.equipment_id = e.id
+                              """
             },
             "17. Призначення спеціальностей": {
                 "table": "personnel_specialties",
@@ -281,8 +332,14 @@ class CRUDFrame(tk.Frame):
                     {"name": "specialty_id", "type": "combo", "required": True, "label": "Спеціальність",
                      "source": "specialties", "source_display": "name"}
                 ],
-                "display_fields": ["id", "personnel_id", "specialty_id"],
-                "headers": ["ID", "ID Військового", "ID Спец."]
+                "display_fields": ["id", "person_name", "spec_name"],
+                "headers": ["ID", "Військовий", "Спеціальність"],
+                "custom_sql": """
+                              SELECT ps.id, (mp.last_name || ' ' || mp.first_name) as person_name, s.name as spec_name
+                              FROM personnel_specialties ps
+                                       JOIN military_personnel mp ON ps.personnel_id = mp.id
+                                       JOIN specialties s ON ps.specialty_id = s.id
+                              """
             },
             "18. Інфо про Генералів": {
                 "table": "generals_info",
@@ -293,10 +350,17 @@ class CRUDFrame(tk.Frame):
                     {"name": "academy_graduation_date", "type": "date", "required": False, "label": "Дата випуску"},
                     {"name": "academy_name", "type": "text", "required": True, "label": "Академія"}
                 ],
-                "display_fields": ["personnel_id", "academy_graduation_date", "academy_name"],
-                "headers": ["ID Генерала", "Дата випуску", "Академія"]
+                "display_fields": ["personnel_id", "gen_name", "academy_graduation_date", "academy_name"],
+                "headers": ["ID", "Генерал", "Дата випуску", "Академія"],
+                "custom_sql": """
+                              SELECT gi.personnel_id,
+                                     (mp.last_name || ' ' || mp.first_name) as gen_name,
+                                     gi.academy_graduation_date,
+                                     gi.academy_name
+                              FROM generals_info gi
+                                       JOIN military_personnel mp ON gi.personnel_id = mp.id
+                              """
             },
-            # --- 🔥 НОВІ ПУНКТИ ДЛЯ СТРУКТУРИ (РОТИ, ВЗВОДИ, ВІДДІЛЕННЯ) ---
             "19. Роти": {
                 "table": "companies",
                 "fields": [
@@ -304,16 +368,19 @@ class CRUDFrame(tk.Frame):
                     {"name": "military_unit_id", "type": "combo", "required": True, "label": "Військова частина",
                      "source": "military_units", "source_display": "number"},
                     {"name": "commander_id", "type": "combo", "required": False, "label": "Командир",
-                     # 2. КОМАНДИР РОТИ: Рівень 2+ (Лейтенант, Капітан і вище)
-                     "custom_query": """
-                        SELECT mp.id, mp.last_name || ' ' || mp.first_name || ' (' || r.name || ')' as d_val 
-                        FROM military_personnel mp JOIN ranks r ON mp.rank_id = r.id
-                        WHERE r.command_level >= 2 ORDER BY mp.last_name
-                     """
-                    }
+                     "custom_query": "SELECT mp.id, mp.last_name || ' ' || mp.first_name || ' (' || r.name || ')' as d_val FROM military_personnel mp JOIN ranks r ON mp.rank_id = r.id WHERE r.command_level >= 2 ORDER BY mp.last_name"}
                 ],
-                "display_fields": ["id", "name", "military_unit_id", "commander_id"],
-                "headers": ["ID", "Назва", "ID в/ч", "ID Командира"]
+                "display_fields": ["id", "name", "unit_num", "cmdr_name"],
+                "headers": ["ID", "Назва", "В/Ч", "Командир"],
+                "custom_sql": """
+                              SELECT c.id,
+                                     c.name,
+                                     mu.number                                               as unit_num,
+                                     (mp.last_name || ' ' || LEFT (mp.first_name, 1) || '.') as cmdr_name
+                              FROM companies c
+                                       JOIN military_units mu ON c.military_unit_id = mu.id
+                                       LEFT JOIN military_personnel mp ON c.commander_id = mp.id
+                              """
             },
             "20. Взводи": {
                 "table": "platoons",
@@ -322,16 +389,19 @@ class CRUDFrame(tk.Frame):
                     {"name": "company_id", "type": "combo", "required": True, "label": "Рота",
                      "source": "companies", "source_display": "name"},
                     {"name": "commander_id", "type": "combo", "required": False, "label": "Командир",
-                     # 3. КОМАНДИР ВЗВОДУ: Рівень 1+ (Сержант і вище)
-                     "custom_query": """
-                        SELECT mp.id, mp.last_name || ' ' || mp.first_name || ' (' || r.name || ')' as d_val 
-                        FROM military_personnel mp JOIN ranks r ON mp.rank_id = r.id
-                        WHERE r.command_level >= 1 ORDER BY mp.last_name
-                     """
-                    }
+                     "custom_query": "SELECT mp.id, mp.last_name || ' ' || mp.first_name || ' (' || r.name || ')' as d_val FROM military_personnel mp JOIN ranks r ON mp.rank_id = r.id WHERE r.command_level >= 1 ORDER BY mp.last_name"}
                 ],
-                "display_fields": ["id", "name", "company_id", "commander_id"],
-                "headers": ["ID", "Назва", "ID Роти", "ID Командира"]
+                "display_fields": ["id", "name", "comp_name", "cmdr_name"],
+                "headers": ["ID", "Назва", "Рота", "Командир"],
+                "custom_sql": """
+                              SELECT p.id,
+                                     p.name,
+                                     c.name                                                  as comp_name,
+                                     (mp.last_name || ' ' || LEFT (mp.first_name, 1) || '.') as cmdr_name
+                              FROM platoons p
+                                       JOIN companies c ON p.company_id = c.id
+                                       LEFT JOIN military_personnel mp ON p.commander_id = mp.id
+                              """
             },
             "21. Відділення": {
                 "table": "squads",
@@ -340,18 +410,20 @@ class CRUDFrame(tk.Frame):
                     {"name": "platoon_id", "type": "combo", "required": True, "label": "Взвод",
                      "source": "platoons", "source_display": "name"},
                     {"name": "commander_id", "type": "combo", "required": False, "label": "Командир",
-                     # 4. КОМАНДИР ВІДДІЛЕННЯ: Рівень 1+ (Сержант і вище)
-                     "custom_query": """
-                        SELECT mp.id, mp.last_name || ' ' || mp.first_name || ' (' || r.name || ')' as d_val 
-                        FROM military_personnel mp JOIN ranks r ON mp.rank_id = r.id
-                        WHERE r.command_level >= 1 ORDER BY mp.last_name
-                     """
-                    }
+                     "custom_query": "SELECT mp.id, mp.last_name || ' ' || mp.first_name || ' (' || r.name || ')' as d_val FROM military_personnel mp JOIN ranks r ON mp.rank_id = r.id WHERE r.command_level >= 1 ORDER BY mp.last_name"}
                 ],
-                "display_fields": ["id", "name", "platoon_id", "commander_id"],
-                "headers": ["ID", "Назва", "ID Взводу", "ID Командира"]
+                "display_fields": ["id", "name", "plat_name", "cmdr_name"],
+                "headers": ["ID", "Назва", "Взвод", "Командир"],
+                "custom_sql": """
+                              SELECT s.id,
+                                     s.name,
+                                     p.name                                                  as plat_name,
+                                     (mp.last_name || ' ' || LEFT (mp.first_name, 1) || '.') as cmdr_name
+                              FROM squads s
+                                       JOIN platoons p ON s.platoon_id = p.id
+                                       LEFT JOIN military_personnel mp ON s.commander_id = mp.id
+                              """
             },
-            # --- 🔥 УНІФІКОВАНИЙ ПУНКТ РОЗКВАРТИРУВАННЯ ---
         }
 
         self.entity_combo['values'] = list(self.entities.keys())
@@ -364,11 +436,9 @@ class CRUDFrame(tk.Frame):
         self._create_crud_interface(self.entities[entity_name], entity_name)
 
     def _create_crud_interface(self, config: Dict[str, Any], entity_name: str):
-        # 1. Панель управління
         control_panel = ttk.Frame(self.content_frame, padding=(0, 0, 0, 10))
         control_panel.grid(row=0, column=0, sticky="ew")
 
-        # Кнопки
         btn_frame = ttk.Frame(control_panel)
         btn_frame.pack(side=tk.LEFT)
 
@@ -378,18 +448,6 @@ class CRUDFrame(tk.Frame):
         ttk.Button(btn_frame, text="🗑️ Видалити", command=lambda: self._delete_record(config)).pack(side=tk.LEFT,
                                                                                                     padx=5)
 
-        # --- 🔥 ДОДАТКОВИЙ ФІЛЬТР ДЛЯ РОЗКВАРТИРУВАННЯ ---
-        if "Розквартирування" in entity_name:
-            filter_frame = ttk.LabelFrame(control_panel, text=" Тип підрозділу ", padding=(5, 0))
-            filter_frame.pack(side=tk.LEFT, padx=15)
-
-            # Комбобокс для перемикання типу (рота/взвод/відділення)
-            type_combo = ttk.Combobox(filter_frame, textvariable=self.current_subunit_type,
-                                      values=["company", "platoon", "squad"], state="readonly", width=15)
-            type_combo.pack()
-            type_combo.bind("<<ComboboxSelected>>", lambda e: self._refresh_table(config))
-
-        # Пошук
         search_frame = ttk.LabelFrame(control_panel, text=" Пошук ", padding=(10, 5))
         search_frame.pack(side=tk.RIGHT, padx=10)
 
@@ -400,7 +458,6 @@ class CRUDFrame(tk.Frame):
 
         ttk.Button(search_frame, text="🔄", width=3, command=lambda: self._refresh_table(config)).pack(side=tk.LEFT)
 
-        # 2. Таблиця
         table_frame = ttk.Frame(self.content_frame)
         table_frame.grid(row=1, column=0, sticky="nsew")
         table_frame.columnconfigure(0, weight=1)
@@ -409,7 +466,6 @@ class CRUDFrame(tk.Frame):
         self.tree = ttk.Treeview(table_frame, show="headings")
         self.tree.grid(row=0, column=0, sticky="nsew")
 
-        # Скролбари
         v_scroll = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.tree.yview)
         v_scroll.grid(row=0, column=1, sticky="ns")
         h_scroll = ttk.Scrollbar(table_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
@@ -420,50 +476,33 @@ class CRUDFrame(tk.Frame):
         self._refresh_table(config)
 
     def _refresh_table(self, config: Dict[str, Any]):
-        table_name = config["table"]
         display_fields = config["display_fields"]
         headers = config.get("headers", display_fields)
-        pk = config.get("pk", "id")
 
-        # Очищаємо таблицю
         for item in self.tree.get_children(): self.tree.delete(item)
 
-        # Налаштовуємо колонки
         self.tree["columns"] = display_fields
         for col, header in zip(display_fields, headers):
             self.tree.heading(col, text=header)
-            # Робимо колонку "Місце служби" ширшою
             width = 300 if "location" in col else 120
             self.tree.column(col, width=width, anchor=tk.W)
 
-        # 🔥 ГОЛОВНА ЗМІНА ТУТ 🔥
-        # Якщо в конфігу є свій SQL - використовуємо його, інакше - стандартний
         if "custom_sql" in config:
             query = config["custom_sql"]
         else:
-            # Стандартна логіка
+            table_name = config["table"]
+            pk = config.get("pk", "id")
             fields_str = ", ".join(display_fields)
-            where_clause = ""
-            if table_name == "facility_subunits":
-                subtype = self.current_subunit_type.get()
-                where_clause = f"WHERE subunit_type = '{subtype}'"
-            query = f'SELECT {fields_str} FROM {table_name} {where_clause} ORDER BY {pk}'
+            query = f'SELECT {fields_str} FROM {table_name} ORDER BY {pk}'
 
         try:
-            # Виконуємо запит
-            # (query_with_columns не потрібен, бо ми знаємо порядок полів з display_fields)
             rows = self.db.query(query)
-
             for row in rows:
-                # Збираємо дані в список у тому порядку, який вказано в display_fields
-                # (Оскільки row - це словник, беремо значення по ключах)
                 values = []
                 for col in display_fields:
                     val = row.get(col)
                     values.append(val if val is not None else "")
-
                 self.tree.insert("", tk.END, values=values)
-
         except Exception as e:
             messagebox.showerror("Помилка", f"Помилка завантаження: {e}")
 
@@ -472,29 +511,30 @@ class CRUDFrame(tk.Frame):
         if not search_term:
             self._refresh_table(config)
             return
-        table_name = config["table"]
+
         display_fields = config["display_fields"]
         pk = config.get("pk", "id")
+
         conditions = [f'{field}::text ILIKE %s' for field in display_fields if field != pk]
         if not conditions: return
-
-        # Враховуємо фільтр типу підрозділу при пошуку
-        extra_where = ""
-        if table_name == "facility_subunits":
-            subtype = self.current_subunit_type.get()
-            extra_where = f"AND subunit_type = '{subtype}'"
-
         where_clause = " OR ".join(conditions)
-        query = f'SELECT {", ".join(display_fields)} FROM {table_name} WHERE ({where_clause}) {extra_where} ORDER BY {pk}'
         params = [f'%{search_term}%'] * len(conditions)
+
+        if "custom_sql" in config:
+            base_sql = config["custom_sql"]
+            query = f"SELECT * FROM ({base_sql}) AS search_sub WHERE {where_clause}"
+        else:
+            table_name = config["table"]
+            query = f'SELECT {", ".join(display_fields)} FROM {table_name} WHERE {where_clause} ORDER BY {pk}'
+
         try:
             cols, rows = self.db.query_with_columns(query, params)
             for item in self.tree.get_children(): self.tree.delete(item)
             for row in rows:
                 values = [row.get(col) for col in display_fields]
                 self.tree.insert("", tk.END, values=values)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Search error: {e}")
 
     def _add_record(self, config):
         self._show_record_dialog(config, "Додати запис")
@@ -525,12 +565,12 @@ class CRUDFrame(tk.Frame):
             self._refresh_table(config)
             messagebox.showinfo("Успіх", "Видалено")
         except Exception as e:
-            messagebox.showerror("Помилка", f"Неможливо видалити: {e}")
+            messagebox.showerror("Помилка", f"Неможливо видалити (можливо, є пов'язані записи): {e}")
 
     def _show_record_dialog(self, config: Dict[str, Any], title: str, record_data: Optional[Dict] = None):
         dialog = tk.Toplevel(self)
         dialog.title(title)
-        dialog.geometry("600x800")  # Збільшив висоту
+        dialog.geometry("600x800")
 
         def close(event=None):
             dialog.destroy()
@@ -538,11 +578,13 @@ class CRUDFrame(tk.Frame):
 
         dialog.bind('<Escape>', close)
 
-        # Центрування
         dialog.update_idletasks()
-        x = self.winfo_rootx() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
-        y = self.winfo_rooty() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
+        try:
+            x = self.winfo_rootx() + (self.winfo_width() // 2) - (dialog.winfo_width() // 2)
+            y = self.winfo_rooty() + (self.winfo_height() // 2) - (dialog.winfo_height() // 2)
+            dialog.geometry(f"+{x}+{y}")
+        except:
+            pass
 
         canvas = tk.Canvas(dialog)
         scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=canvas.yview)
@@ -561,12 +603,11 @@ class CRUDFrame(tk.Frame):
         ttk.Label(frame, text=title, font=("Segoe UI", 14, "bold")).grid(row=0, column=0, pady=(0, 20))
         current_row_idx = 1
 
-        # --- 🔥 ЛОГІКА РІВНІВ ПРИЗНАЧЕННЯ (Тільки для Військових) ---
-        assignment_level_var = tk.StringVar(value="unit")  # unit, company, platoon, squad
-        rows_map = {}  # Зберігатимемо посилання на рядки інтерфейсу, щоб ховати їх
+        assignment_level_var = tk.StringVar(value="unit")
+        unit_parent_var = tk.StringVar(value="division")
+        rows_map = {}
 
         if config["table"] == "military_personnel":
-            # Визначаємо початковий рівень, якщо редагуємо
             if record_data:
                 if record_data.get('squad_id'):
                     assignment_level_var.set("squad")
@@ -581,36 +622,58 @@ class CRUDFrame(tk.Frame):
             level_frame.grid(row=current_row_idx, column=0, sticky="ew", pady=(0, 15))
             current_row_idx += 1
 
-            # Функція для приховування/показу полів
-            def update_visibility():
+            def update_personnel_visibility():
                 lvl = assignment_level_var.get()
-
-                # Спочатку сховаємо все, крім Unit (він обов'язковий)
                 if 'company_id' in rows_map: rows_map['company_id'].grid_remove()
                 if 'platoon_id' in rows_map: rows_map['platoon_id'].grid_remove()
                 if 'squad_id' in rows_map: rows_map['squad_id'].grid_remove()
 
-                # Тепер показуємо залежно від рівня
-                if lvl in ["company", "platoon", "squad"]:
-                    if 'company_id' in rows_map: rows_map['company_id'].grid()
-
-                if lvl in ["platoon", "squad"]:
-                    if 'platoon_id' in rows_map: rows_map['platoon_id'].grid()
-
-                if lvl == "squad":
-                    if 'squad_id' in rows_map: rows_map['squad_id'].grid()
+                if lvl in ["company", "platoon", "squad"] and 'company_id' in rows_map:
+                    rows_map['company_id'].grid()
+                if lvl in ["platoon", "squad"] and 'platoon_id' in rows_map:
+                    rows_map['platoon_id'].grid()
+                if lvl == "squad" and 'squad_id' in rows_map:
+                    rows_map['squad_id'].grid()
 
             ttk.Radiobutton(level_frame, text="Штаб Частини", variable=assignment_level_var, value="unit",
-                            command=update_visibility).pack(side=tk.LEFT, padx=5)
+                            command=update_personnel_visibility).pack(side=tk.LEFT, padx=5)
             ttk.Radiobutton(level_frame, text="Рота", variable=assignment_level_var, value="company",
-                            command=update_visibility).pack(side=tk.LEFT, padx=5)
+                            command=update_personnel_visibility).pack(side=tk.LEFT, padx=5)
             ttk.Radiobutton(level_frame, text="Взвод", variable=assignment_level_var, value="platoon",
-                            command=update_visibility).pack(side=tk.LEFT, padx=5)
+                            command=update_personnel_visibility).pack(side=tk.LEFT, padx=5)
             ttk.Radiobutton(level_frame, text="Відділення", variable=assignment_level_var, value="squad",
-                            command=update_visibility).pack(side=tk.LEFT, padx=5)
+                            command=update_personnel_visibility).pack(side=tk.LEFT, padx=5)
 
-        # --- ГЕНЕРАЦІЯ ПОЛІВ ---
-        # Логіка оновлення списків (каскад)
+        if config["table"] == "military_units":
+            if record_data:
+                if record_data.get('brigade_id'):
+                    unit_parent_var.set("brigade")
+                else:
+                    unit_parent_var.set("division")
+
+            parent_frame = ttk.LabelFrame(frame, text="Підпорядкування", padding=10)
+            parent_frame.grid(row=current_row_idx, column=0, sticky="ew", pady=(0, 15))
+            current_row_idx += 1
+
+            def update_unit_visibility():
+                ptype = unit_parent_var.get()
+                if 'division_id' in rows_map:
+                    if ptype == "division":
+                        rows_map['division_id'].grid()
+                    else:
+                        rows_map['division_id'].grid_remove()
+
+                if 'brigade_id' in rows_map:
+                    if ptype == "brigade":
+                        rows_map['brigade_id'].grid()
+                    else:
+                        rows_map['brigade_id'].grid_remove()
+
+            ttk.Radiobutton(parent_frame, text="Дивізія", variable=unit_parent_var, value="division",
+                            command=update_unit_visibility).pack(side=tk.LEFT, padx=5)
+            ttk.Radiobutton(parent_frame, text="Бригада", variable=unit_parent_var, value="brigade",
+                            command=update_unit_visibility).pack(side=tk.LEFT, padx=5)
+
         def update_child_combo(child_name, table, fk_col, parent_id_str):
             child_widget = widgets.get(child_name)
             if not child_widget: return
@@ -631,19 +694,13 @@ class CRUDFrame(tk.Frame):
         def on_unit_change(event):
             val = widgets['military_unit_id'].get()
             update_child_combo('company_id', 'companies', 'military_unit_id', val)
-            if 'platoon_id' in widgets:
-                widgets['platoon_id'].set("")
-                widgets['platoon_id']['values'] = []
-            if 'squad_id' in widgets:
-                widgets['squad_id'].set("")
-                widgets['squad_id']['values'] = []
+            if 'platoon_id' in widgets: widgets['platoon_id'].set(""); widgets['platoon_id']['values'] = []
+            if 'squad_id' in widgets: widgets['squad_id'].set(""); widgets['squad_id']['values'] = []
 
         def on_company_change(event):
             val = widgets['company_id'].get()
             update_child_combo('platoon_id', 'platoons', 'company_id', val)
-            if 'squad_id' in widgets:
-                widgets['squad_id'].set("")
-                widgets['squad_id']['values'] = []
+            if 'squad_id' in widgets: widgets['squad_id'].set(""); widgets['squad_id']['values'] = []
 
         def on_platoon_change(event):
             val = widgets['platoon_id'].get()
@@ -655,7 +712,7 @@ class CRUDFrame(tk.Frame):
 
             row = ttk.Frame(frame)
             row.grid(row=current_row_idx, column=0, sticky="ew", pady=5)
-            rows_map[f_name] = row  # Зберігаємо посилання на рядок
+            rows_map[f_name] = row
             current_row_idx += 1
 
             ttk.Label(row, text=f_label, width=20).pack(side=tk.LEFT)
@@ -665,7 +722,6 @@ class CRUDFrame(tk.Frame):
                 w = DateEntry(row, date_pattern="yyyy-mm-dd", width=25)
             elif field["type"] == "combo":
                 load_now = True
-                # Не вантажимо залежні списки одразу
                 if config["table"] == "military_personnel" and f_name in ['company_id', 'platoon_id',
                                                                           'squad_id'] and not record_data:
                     load_now = False
@@ -694,7 +750,6 @@ class CRUDFrame(tk.Frame):
             w.pack(side=tk.RIGHT, expand=True, fill=tk.X)
             widgets[f_name] = w
 
-            # --- ЗАПОВНЕННЯ ПРИ РЕДАГУВАННІ ---
             if record_data and f_name in record_data:
                 val = record_data[f_name]
                 if val is not None:
@@ -703,8 +758,8 @@ class CRUDFrame(tk.Frame):
                         found = False
                         for item in w['values']:
                             if item.startswith(search_prefix):
-                                w.set(item)
-                                found = True
+                                w.set(item);
+                                found = True;
                                 break
                         if not found and "source" in field:
                             try:
@@ -723,13 +778,13 @@ class CRUDFrame(tk.Frame):
                         w.delete(0, tk.END)
                         w.insert(0, str(val))
 
-        # --- БІНДИНГ ПОДІЙ ---
+
         if config["table"] == "military_personnel":
             widgets['military_unit_id'].bind("<<ComboboxSelected>>", on_unit_change)
             widgets['company_id'].bind("<<ComboboxSelected>>", on_company_change)
             widgets['platoon_id'].bind("<<ComboboxSelected>>", on_platoon_change)
 
-            # Відновлення каскаду при редагуванні
+            # Відновлення каскаду
             if record_data:
                 u_val = widgets['military_unit_id'].get()
                 update_child_combo('company_id', 'companies', 'military_unit_id', u_val)
@@ -752,36 +807,41 @@ class CRUDFrame(tk.Frame):
                     for v in widgets['squad_id']['values']:
                         if v.startswith(f"{s_id}:"): widgets['squad_id'].set(v); break
 
-            # Оновлюємо видимість полів відповідно до обраного радіобаттона
-            update_visibility()
+            update_personnel_visibility()
 
-        # --- ФУНКЦІЯ ЗБЕРЕЖЕННЯ ---
+        if config["table"] == "military_units":
+            update_unit_visibility()
+
         def save():
             data = {}
-            current_level = assignment_level_var.get()
+
+            personnel_level = assignment_level_var.get()
+            unit_level = unit_parent_var.get()
 
             for f in config["fields"]:
                 f_name = f["name"]
                 w_widget = widgets[f_name]
                 val = w_widget.get().strip()
 
-                # Очищення даних залежно від рівня (Щоб не записати сміття)
                 if config["table"] == "military_personnel":
-                    if current_level == "unit":
+                    if personnel_level == "unit":
                         if f_name in ["company_id", "platoon_id", "squad_id"]: val = ""
-                    elif current_level == "company":
+                    elif personnel_level == "company":
                         if f_name in ["platoon_id", "squad_id"]: val = ""
-                    elif current_level == "platoon":
+                    elif personnel_level == "platoon":
                         if f_name == "squad_id": val = ""
 
+                if config["table"] == "military_units":
+                    if unit_level == "division":
+                        if f_name == "brigade_id": val = ""
+                    else:  # brigade
+                        if f_name == "division_id": val = ""
+
                 if f.get("required") and not val:
-                    # Перевіряємо, чи поле видиме (якщо сховане - ігноруємо required)
-                    if f_name in rows_map:
-                        if rows_map[f_name].winfo_viewable():
-                            messagebox.showwarning("Увага", f"Заповніть поле '{f['label']}'")
-                            return
+                    if f_name in rows_map and not rows_map[f_name].winfo_viewable():
+                        pass
                     else:
-                        messagebox.showwarning("Увага", f"Заповніть поле '{f['label']}'")
+                        messagebox.showwarning("Не всі поля заповнені", f"Будь ласка, заповніть поле: '{f['label']}'")
                         return
 
                 if f["type"] == "int":
@@ -791,57 +851,48 @@ class CRUDFrame(tk.Frame):
                 else:
                     data[f["name"]] = val if val else None
 
-            try:
-                if record_data:
-                    set_cl = ", ".join([f"{k}=%s" for k in data])
-                    params = list(data.values()) + [record_data[pk]]
-                    self.db.execute(f'UPDATE {config["table"]} SET {set_cl} WHERE {pk}=%s', params)
-                else:
-                    cols = ", ".join(data.keys())
-                    phs = ", ".join(["%s"] * len(data))
-                    self.db.execute(f'INSERT INTO {config["table"]} ({cols}) VALUES ({phs})', list(data.values()))
-
-                messagebox.showinfo("ОК", "Збережено")
-                dialog.destroy()
-                self._refresh_table(config)
-            except Exception as e:
-                messagebox.showerror("Помилка", str(e))
-
-        ttk.Button(frame, text="💾 Зберегти", command=save).grid(row=current_row_idx, column=0, pady=20, sticky="ew")
-
-        def save():
-            data = {}
-            for f in config["fields"]:
-                w_widget = widgets[f["name"]]
-                val = w_widget.get().strip()
-
-                if f.get("required") and not val:
-                    # Якщо поле приховане (через перемикач), ми не повинні вимагати його заповнення,
-                    # але оскільки ми його очищуємо, валідація 'required' може спрацювати.
-                    # В конфігу division_id і brigade_id мають required=False, тому тут все ок.
-                    messagebox.showwarning("Увага", f"Заповніть поле '{f['label']}'")
-                    return
-
-                if f["type"] == "int":
-                    data[f["name"]] = int(val) if val else None
-                elif f["type"] == "combo" and ("source" in f or "custom_query" in f):
-                    data[f["name"]] = int(val.split(":")[0]) if val else None
-                else:
-                    data[f["name"]] = val if val else None
-
-            # --- ВАЛІДАЦІЯ: Військова частина не може бути одночасно і в Дивізії, і в Бригаді ---
-            # Ця перевірка тепер менш критична, бо UI це контролює, але не завадить.
             if config["table"] == "military_units":
-                div_id = data.get("division_id")
-                brig_id = data.get("brigade_id")
-
-                if div_id is not None and brig_id is not None:
-                    messagebox.showerror(
-                        "Помилка підпорядкування",
-                        "Військова частина НЕ може підпорядковуватися одночасно і Дивізії, і Бригаді."
-                    )
+                if unit_level == "division" and not data.get("division_id"):
+                    messagebox.showwarning("Увага", "Ви обрали тип 'Дивізія', але не вказали саму Дивізію.")
                     return
-            # ------------------------------------------------------------------------------------
+                if unit_level == "brigade" and not data.get("brigade_id"):
+                    messagebox.showwarning("Увага", "Ви обрали тип 'Бригада', але не вказали саму Бригаду.")
+                    return
+
+            if config["table"] == "military_personnel":
+                b_date = data.get("birth_date")
+                e_date = data.get("enlistment_date")
+
+                if b_date:
+                    try:
+                        if isinstance(b_date, str):
+                            b_date_obj = datetime.strptime(b_date, "%Y-%m-%d").date()
+                        else:
+                            b_date_obj = b_date
+
+                        today = date.today()
+                        age = today.year - b_date_obj.year - (
+                                    (today.month, today.day) < (b_date_obj.month, b_date_obj.day))
+
+                        if age < 18:
+                            messagebox.showwarning("Помилка віку", "Військовослужбовцю повинно бути мінімум 18 років!")
+                            return
+                    except Exception as e:
+                        print(f"Date check error: {e}")
+
+                if e_date:
+                    try:
+                        if isinstance(e_date, str):
+                            e_date_obj = datetime.strptime(e_date, "%Y-%m-%d").date()
+                        else:
+                            e_date_obj = e_date
+
+                        if e_date_obj > date.today():
+                            messagebox.showwarning("Помилка дати",
+                                                   "Дата прийняття на службу не може бути в майбутньому!")
+                            return
+                    except:
+                        pass
 
             try:
                 if record_data:
@@ -853,10 +904,14 @@ class CRUDFrame(tk.Frame):
                     phs = ", ".join(["%s"] * len(data))
                     self.db.execute(f'INSERT INTO {config["table"]} ({cols}) VALUES ({phs})', list(data.values()))
 
-                messagebox.showinfo("ОК", "Збережено")
+                messagebox.showinfo("Успіх", "Запис успішно збережено!")
                 dialog.destroy()
                 self._refresh_table(config)
+
             except Exception as e:
-                messagebox.showerror("Помилка", str(e))
+                if "duplicate key" in str(e):
+                    messagebox.showerror("Помилка бази даних", "Такий запис вже існує (дублювання унікального поля).")
+                else:
+                    messagebox.showerror("Системна помилка", f"Деталі: {str(e)}")
 
         ttk.Button(frame, text="💾 Зберегти", command=save).grid(row=current_row_idx, column=0, pady=20, sticky="ew")

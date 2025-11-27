@@ -16,7 +16,6 @@ class AuthService:
             return False
 
     def get_key_by_login(self, login: str) -> Optional[Dict]:
-        # Отримуємо дані тільки з таблиці ключів
         sql = """
               SELECT k.id, k.login, k.password, k.role_id, r.name AS role, k.user_id
               FROM keys k
@@ -30,16 +29,13 @@ class AuthService:
         return self.db.query('SELECT login, password FROM keys')
 
     def create_user(self, login: str, password: str, role_name: str, email: Optional[str] = None) -> int:
-        # 1. Знаходимо роль
         role = self.db.query('SELECT id FROM roles WHERE name=%s', [role_name])
         if not role: raise ValueError(f"Role '{role_name}' not found")
         role_id = role[0][0]
 
-        # 2. Створюємо профіль в users (тільки email і статус)
         user_sql = 'INSERT INTO users (email, confirmed) VALUES (%s, %s) RETURNING id'
         user_id = self.db.query(user_sql, [email, True])[0][0]
 
-        # 3. Створюємо ключі в keys (логін, пароль, роль)
         pwd = self.hash_password(password)
         keys_sql = 'INSERT INTO keys (login, password, role_id, user_id) VALUES (%s, %s, %s, %s)'
         self.db.execute(keys_sql, [login, pwd, role_id, user_id])
@@ -47,10 +43,8 @@ class AuthService:
         return user_id
 
     def register_with_request(self, login: str, password: str, target_role: str, email: Optional[str] = None):
-        # Створення Гостя (через метод create_user)
         user_id = self.create_user(login, password, "Guest", email)
 
-        # Створення запиту
         req_type = 'role_operator' if target_role == 'Operator' else 'role_authorized'
         self.create_request(user_id, login, req_type)
 
@@ -58,10 +52,8 @@ class AuthService:
         key = self.get_key_by_login(login)
         if not key: return None
 
-        # Перевірка пароля
         if not self.verify(password, key['password']): return None
 
-        # Перевірка статусу в таблиці users
         user_data = self.db.query('SELECT confirmed, email FROM users WHERE id=%s', [key['user_id']])
         if not user_data or not user_data[0]['confirmed']: return None
 
@@ -72,11 +64,9 @@ class AuthService:
     def login_as_guest(self) -> Optional[Dict]:
         guest = self.get_key_by_login('guest')
         if not guest:
-            # Автоматично створюємо системного гостя, якщо немає
             self.create_user('guest', 'guest', 'Guest', 'guest@system')
             guest = self.get_key_by_login('guest')
 
-        # Перевіряємо чи існує профіль
         user_data = self.db.query('SELECT email FROM users WHERE id=%s', [guest['user_id']])
 
         session = guest.copy()
@@ -87,7 +77,6 @@ class AuthService:
         h = self.hash_password(new_pass)
         self.db.execute("UPDATE keys SET password=%s WHERE login=%s", [h, login])
 
-    # --- REQUESTS ---
     def create_request(self, uid, login, rtype):
         exists = self.db.query("SELECT id FROM requests WHERE login=%s AND request_type=%s AND status='pending'",
                                [login, rtype])
