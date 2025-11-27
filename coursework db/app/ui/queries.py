@@ -428,7 +428,7 @@ class QueriesFrame(tk.Frame):
         if not fname: return
 
         try:
-            with open(fname, 'w', newline='', encoding='utf-8') as f:
+            with open(fname, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(self.tree["columns"])
                 for i in items:

@@ -5,7 +5,6 @@
 -- 1. CLEANUP
 DROP TABLE IF EXISTS artillery_attributes CASCADE;
 DROP TABLE IF EXISTS vehicle_attributes CASCADE;
-DROP TABLE IF EXISTS facility_subunits CASCADE;
 DROP TABLE IF EXISTS facilities CASCADE;
 DROP TABLE IF EXISTS requests CASCADE;
 DROP TABLE IF EXISTS keys CASCADE;
@@ -205,9 +204,10 @@ CREATE TABLE generals_info (
 );
 
 CREATE TABLE personnel_specialties (
+    id SERIAL PRIMARY KEY,  -- <-- ДОДАЛИ ЦЕ
     personnel_id INT REFERENCES military_personnel(id) ON DELETE CASCADE,
     specialty_id INT REFERENCES specialties(id) ON DELETE CASCADE,
-    PRIMARY KEY (personnel_id, specialty_id)
+    UNIQUE (personnel_id, specialty_id) -- Щоб не дублювати одну й ту саму спец.
 );
 
 -- =====================================================
@@ -233,11 +233,6 @@ CREATE TABLE equipment (
     condition VARCHAR(50)
 );
 
-CREATE TABLE vehicle_attributes (
-    equipment_id INT PRIMARY KEY REFERENCES equipment(id) ON DELETE CASCADE,
-    max_speed_kmh INT,
-    armor_thickness_mm INT
-);
 
 CREATE TABLE weapon_types (
     id SERIAL PRIMARY KEY,
@@ -257,9 +252,23 @@ CREATE TABLE weapons (
     military_unit_id INT NOT NULL REFERENCES military_units(id) ON DELETE CASCADE
 );
 
-CREATE TABLE artillery_attributes (
-    weapon_id INT PRIMARY KEY REFERENCES weapons(id) ON DELETE CASCADE,
+CREATE TABLE vehicle_attributes (
+    id SERIAL PRIMARY KEY, -- ✅ Додано ID
+    equipment_id INT NOT NULL UNIQUE REFERENCES equipment(id) ON DELETE CASCADE,
+    max_speed_kmh INT,
+    armor_thickness_mm INT
+);
+
+-- ... (таблиці weapon_types, weapons)
+
+-- ЗМІНЕНО: Замість artillery_attributes -> weapon_attributes
+CREATE TABLE weapon_attributes (
+    id SERIAL PRIMARY KEY, -- ✅ Додано ID
+    weapon_id INT NOT NULL UNIQUE REFERENCES weapons(id) ON DELETE CASCADE,
     max_range_km DECIMAL(10,2)
+    -- Можна додати інші поля, наприклад:
+    -- fire_rate INT,
+    -- sighting_range INT
 );
 
 -- =====================================================
@@ -275,16 +284,13 @@ CREATE TABLE facilities (
     location_id INT REFERENCES locations(id)
 );
 
-CREATE TABLE facility_subunits (
-    facility_id INT REFERENCES facilities(id) ON DELETE CASCADE,
-    subunit_id INT NOT NULL,
-    subunit_type VARCHAR(20) NOT NULL,
-    PRIMARY KEY (facility_id, subunit_id, subunit_type)
-);
-
 -- =====================================================
 -- 8. CONSTRAINTS & TRIGGERS
 -- =====================================================
+
+ALTER TABLE military_personnel ADD COLUMN company_id INT REFERENCES companies(id) ON DELETE SET NULL;
+ALTER TABLE military_personnel ADD COLUMN platoon_id INT REFERENCES platoons(id) ON DELETE SET NULL;
+ALTER TABLE military_personnel ADD COLUMN squad_id INT REFERENCES squads(id) ON DELETE SET NULL;
 
 ALTER TABLE military_units ADD CONSTRAINT fk_unit_commander FOREIGN KEY (commander_id) REFERENCES military_personnel(id);
 ALTER TABLE companies ADD CONSTRAINT fk_company_commander FOREIGN KEY (commander_id) REFERENCES military_personnel(id);
@@ -386,5 +392,3 @@ INSERT INTO weapons (weapon_type_id, model, serial_number, caliber, military_uni
 -- 9.9 Infrastructure
 INSERT INTO facilities (name, type, address, military_unit_id, location_id) VALUES
 ('Казарма №1', 'Barracks', 'вул. Полкова, 5', 1, 2);
-
-INSERT INTO facility_subunits (facility_id, subunit_id, subunit_type) VALUES (1, 1, 'platoon'); -- 1st platoon in Barracks 1
